@@ -28,6 +28,7 @@ int main(int argc, char* argv[]) {
   bool noTxtFile = std::string(argv[4]).compare(std::string("n")) == 0 || !pangolin::FileExists(std::string(argv[4]));
   bool spherical = std::string(argv[5]).compare(std::string("y")) == 0;
   bool hasNoPro2File = argc < 10 || std::string(argv[9]).compare(std::string("n")) == 0;
+  std::cout << "hasNoPro2File " << hasNoPro2File << "\n";
   int width = std::stoi(std::string(argv[7]));
   int height = std::stoi(std::string(argv[8]));
 
@@ -132,7 +133,7 @@ int main(int argc, char* argv[]) {
   std::vector<float> initCam = {0,0.5,-0.6230950951576233};//default
   if(navCam){
     initCam = cameraPos[0];
-    std::cout<<"First camera position:"<<initCam[0]<<" "<<initCam[1]<<" "<<initCam[2];
+    std::cout<<"First camera position:"<<initCam[0]<<" "<<initCam[1]<<" "<<initCam[2] << "\n";
   }
 
   //random look at direction
@@ -420,6 +421,9 @@ int main(int argc, char* argv[]) {
 
           // Download and save
           render.Download(image.ptr, GL_RGB, GL_UNSIGNED_BYTE);
+          if (12 == k || 13 == k || 14 == k || 15 == k){
+            continue;
+          }
           char equirectFilename[1000];
           snprintf(equirectFilename, 1000, "%s/%s_%04zu_pos%02zu.jpeg", outputDir.c_str(), scene.c_str(), j, k);
           pangolin::SaveImage(
@@ -437,7 +441,7 @@ int main(int argc, char* argv[]) {
               glViewport(0, 0, width, height);
               glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
               glEnable(GL_CULL_FACE);
-              ptexMesh.RenderDepth(s_cam, 1.f/ 16.f, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), eye);
+              ptexMesh.RenderDepth(s_cam, 1.f/16.f, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), eye);
               glDisable(GL_CULL_FACE);
               glPopAttrib(); //GL_VIEWPORT_BIT
 
@@ -446,6 +450,7 @@ int main(int argc, char* argv[]) {
 
               char filename[1000];
               snprintf(filename, 1000, "%s/%s_%04zu_pos%02zu.jpeg", outputDir.c_str(), scene.c_str(), j, 11 + (k+1)/3 ); //11+(k+1)/3 maps 2-12; 5-13; 8-14; 11-15
+              std::cout << "render depth image to " << filename << "\n";
               pangolin::SaveImage(
                 depthImage.UnsafeReinterpret<uint8_t>(),
                 pangolin::PixelFormatFromString("RGB24"),
