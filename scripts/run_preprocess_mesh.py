@@ -122,8 +122,6 @@ def transform_and_save_infosemanticjson(object_semantic_filepath, saved_object_s
         obb_T[:3, :3] = obb_R
         obb_T[:3, 3] = obb_t
         obb_T_inv = np.linalg.inv(obb_T)
-        if obj_id == 22:
-            print(f'blinds_22 Transform: \n {obb_T}')
         tmp = obb_center.copy()
         tmp = tmp - (obb_T_inv[:3,:3] @ gravity_center + obb_T_inv[:3,3])
         obb_center[0] = float(tmp[0])
@@ -203,8 +201,8 @@ def main(dataset_path):
     b_skip_info_semantic_json = False
     b_skip_cam_6dof_file = True
     for folder in scene_folders:
-        if folder != 'room_0':
-            continue
+        # if folder != 'room_0':
+        #     continue
 
         print(f' ------------------------ preprocessing scene {folder} ------------------------ ')
 
@@ -213,12 +211,12 @@ def main(dataset_path):
         semantic_mesh_filepath = osp.join(dataset_path, folder, 'habitat/mesh_semantic.ply')
         scene_semantic_filepath = osp.join(dataset_path, folder, 'semantic.json')
         object_semantic_filepath = osp.join(dataset_path, folder, 'habitat/info_semantic.json')
-        saved_mesh_filepath = osp.join(dataset_path, folder, 'rotated_mesh.ply')
+        saved_mesh_filepath = osp.join(dataset_path, folder, scene_name+'.ply')
         saved_semantic_mesh_filepath = osp.join(dataset_path, folder, 'habitat/rotated_mesh_semantic.ply')
         cam_position_filepath = osp.join(dataset_path, folder, scene_name + '_6dof.txt')
         saved_cam_position_filepath = cam_position_filepath
         saved_object_semantic_filepath = osp.join(dataset_path, folder, 'habitat/rotated_info_semantic.json')
-        saved_obj_bbox_prior_filepath = osp.join(dataset_path, folder, 'habitat/3dbbox_prior.json')
+        saved_obj_bbox_prior_filepath = osp.join(dataset_path, folder, scene_name+'.json')
 
 
         assert osp.exists(scene_mesh_filepath), f"{scene_mesh_filepath} doesnt exist..."
