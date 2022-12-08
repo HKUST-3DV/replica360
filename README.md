@@ -1,4 +1,4 @@
-# MatryODShka Replica 360 Dataset Generator
+# Replica 360 Dataset Generator
 This repo contains the modified version of [Replica Dataset](https://github.com/facebookresearch/Replica-Dataset) to generate the training and testing dataset used in [MatryODShka](https://visual.cs.brown.edu/projects/matryodshka-webpage/) paper. This is a companion to the training code [repo](https://github.com/brownvc/matryodshka).
 
 The original ReplicaRenderer and ReplicaViewer remain the same. See original repo for basic usage. See below for 360 dataset generation.
@@ -11,12 +11,10 @@ The original ReplicaRenderer and ReplicaViewer remain the same. See original rep
 
 
 ### Basic Usage
-To generate the training and testing dataset, run 
+To generate the panoramic rgb/depth images, run 
 
 ```
-./build/ReplicaSDK/ReplicaRendererDataset dataset/scene_name/mesh.ply 
-dataset/scene_name/textures dataset/scene_name/glass.sur camera_parameters[file.txt / n] 
-spherical[y/n] output/dir/ output_width output_height pro2[globs/pro2pos.txt / n]
+./build/ReplicaSDK/ReplicaRendererDataset [dataset/scene_name/mesh.ply] [dataset/scene_name/textures] [camera_trajectory_file]  [output_dir]  [img_width] [img_height]
 ```
 
 The data generation takes in a text file specifying the camera position, ods baseline and target camera positions for each navigable position within the scene. A single line in the input text file (camera_parameters.txt) is formatted as:
@@ -30,21 +28,5 @@ The existing text files contain navigable positions within each scene, sampled w
 Find all the existing text files in glob/.
 
 
-## Video Rendering
-This repo also supports video dataset rendering specifically. 
-### Basic Usage 
-```
-./build/ReplicaSDK/ReplicaVideoRenderer path/to/scene/mesh.ply 
-path/to/scene/textures path/to/scene/glass.sur camera_parameters.txt 
-spherical[y/n] output/dir/ width height
-```
-The difference is the format of a single line in input text file for video rendering is:
-```
-camera_position_x camera_position_y camera_position_z 
-lookat_x lookat_y lookat_z ods_baseline 
-rotation_x rotation_y rotation_z target_x target_y target_z
-```
-
-To generate a video path, one can use `glob/gen_video_path.py`. See `glob/example_script` for an example of straight path generation.
 
 
