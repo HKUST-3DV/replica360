@@ -1,19 +1,21 @@
 // Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 #include "PTexLib.h"
-#include "PLYParser.h"
-
-#include <pangolin/utils/file_utils.h>
-#include <pangolin/utils/picojson.h>
-#include <Eigen/Geometry>
 
 #include <fcntl.h>
+#include <pangolin/utils/file_utils.h>
+#include <pangolin/utils/picojson.h>
 #include <sys/mman.h>
 #include <unistd.h>
+
+#include <Eigen/Geometry>
 #include <experimental/filesystem>
 #include <fstream>
 #include <unordered_map>
 
-PTexMesh::PTexMesh(const std::string& meshFile, const std::string& atlasFolder, bool rS) {
+#include "PLYParser.h"
+
+PTexMesh::PTexMesh(const std::string& meshFile, const std::string& atlasFolder,
+                   bool rS) {
   // Check everything exists
   ASSERT(pangolin::FileExists(meshFile));
   ASSERT(pangolin::FileExists(atlasFolder));
@@ -44,75 +46,65 @@ PTexMesh::PTexMesh(const std::string& meshFile, const std::string& atlasFolder, 
   const std::string shadir = STR(SHADER_DIR);
   ASSERT(pangolin::FileExists(shadir), "Shader directory not found!");
 
-  if(renderSpherical){
-    shader.AddShaderFromFile(pangolin::GlSlVertexShader, shadir + "/mesh-ptex-spherical.vert", {}, {shadir});
-    shader.AddShaderFromFile(pangolin::GlSlGeometryShader, shadir + "/mesh-ptex-spherical.geom", {}, {shadir});
-    shader.AddShaderFromFile(pangolin::GlSlFragmentShader, shadir + "/mesh-ptex.frag", {}, {shadir});
+  if (renderSpherical) {
+    shader.AddShaderFromFile(pangolin::GlSlVertexShader,
+                             shadir + "/mesh-ptex-spherical.vert", {},
+                             {shadir});
+    shader.AddShaderFromFile(pangolin::GlSlGeometryShader,
+                             shadir + "/mesh-ptex-spherical.geom", {},
+                             {shadir});
+    shader.AddShaderFromFile(pangolin::GlSlFragmentShader,
+                             shadir + "/mesh-ptex.frag", {}, {shadir});
+    shader.Link();
+  } else {
+    shader.AddShaderFromFile(pangolin::GlSlVertexShader,
+                             shadir + "/mesh-ptex.vert", {}, {shadir});
+    shader.AddShaderFromFile(pangolin::GlSlGeometryShader,
+                             shadir + "/mesh-ptex.geom", {}, {shadir});
+    shader.AddShaderFromFile(pangolin::GlSlFragmentShader,
+                             shadir + "/mesh-ptex.frag", {}, {shadir});
     shader.Link();
   }
-  else{
-    shader.AddShaderFromFile(pangolin::GlSlVertexShader, shadir + "/mesh-ptex.vert", {}, {shadir});
-    shader.AddShaderFromFile(pangolin::GlSlGeometryShader, shadir + "/mesh-ptex.geom", {}, {shadir});
-    shader.AddShaderFromFile(pangolin::GlSlFragmentShader, shadir + "/mesh-ptex.frag", {}, {shadir});
-    shader.Link();
 
-  }
-
-  if(renderSpherical){
-    depthShader.AddShaderFromFile(pangolin::GlSlVertexShader, shadir + "/mesh-depth-spherical.vert", {}, {shadir});
-    depthShader.AddShaderFromFile(pangolin::GlSlGeometryShader, shadir + "/mesh-depth-spherical.geom", {}, {shadir});
-    depthShader.AddShaderFromFile(pangolin::GlSlFragmentShader, shadir + "/mesh-depth.frag", {}, {shadir});
+  if (renderSpherical) {
+    depthShader.AddShaderFromFile(pangolin::GlSlVertexShader,
+                                  shadir + "/mesh-depth-spherical.vert", {},
+                                  {shadir});
+    depthShader.AddShaderFromFile(pangolin::GlSlGeometryShader,
+                                  shadir + "/mesh-depth-spherical.geom", {},
+                                  {shadir});
+    depthShader.AddShaderFromFile(pangolin::GlSlFragmentShader,
+                                  shadir + "/mesh-depth.frag", {}, {shadir});
     depthShader.Link();
 
-
-  }else{
-    depthShader.AddShaderFromFile(pangolin::GlSlVertexShader, shadir + "/mesh-depth.vert", {}, {shadir});
-    depthShader.AddShaderFromFile(pangolin::GlSlFragmentShader, shadir + "/mesh-depth.frag", {}, {shadir});
+  } else {
+    depthShader.AddShaderFromFile(pangolin::GlSlVertexShader,
+                                  shadir + "/mesh-depth.vert", {}, {shadir});
+    depthShader.AddShaderFromFile(pangolin::GlSlFragmentShader,
+                                  shadir + "/mesh-depth.frag", {}, {shadir});
     depthShader.Link();
-
-
   }
-
 }
 
 PTexMesh::~PTexMesh() {}
 
-float PTexMesh::Exposure() const {
-  return exposure;
-}
+float PTexMesh::Exposure() const { return exposure; }
 
-void PTexMesh::SetExposure(const float& val) {
-  exposure = val;
-}
+void PTexMesh::SetExposure(const float& val) { exposure = val; }
 
-float PTexMesh::Gamma() const {
-  return gamma;
-}
+float PTexMesh::Gamma() const { return gamma; }
 
-void PTexMesh::SetGamma(const float& val) {
-  gamma = val;
-}
+void PTexMesh::SetGamma(const float& val) { gamma = val; }
 
-float PTexMesh::Saturation() const {
-  return saturation;
-}
+float PTexMesh::Saturation() const { return saturation; }
 
-void PTexMesh::SetSaturation(const float& val) {
-  saturation = val;
-}
+void PTexMesh::SetSaturation(const float& val) { saturation = val; }
 
-void PTexMesh::SetBaseline(const float& val){
+void PTexMesh::SetBaseline(const float& val) { baseline = val; }
 
-  baseline = val;
-
-}
-
-void PTexMesh::RenderSubMesh(
-    size_t subMesh,
-    const pangolin::OpenGlRenderState& cam,
-    const Eigen::Vector4f& clipPlane,
-    int lrC
-  ) {
+void PTexMesh::RenderSubMesh(size_t subMesh,
+                             const pangolin::OpenGlRenderState& cam,
+                             const Eigen::Vector4f& clipPlane, int lrC) {
   ASSERT(subMesh < meshes.size());
   Mesh& mesh = *meshes[subMesh];
 
@@ -122,16 +114,16 @@ void PTexMesh::RenderSubMesh(
   shader.SetUniform("exposure", exposure);
   shader.SetUniform("gamma", 1.0f / gamma);
   shader.SetUniform("saturation", saturation);
-  shader.SetUniform("clipPlane", clipPlane(0), clipPlane(1), clipPlane(2), clipPlane(3));
+  shader.SetUniform("clipPlane", clipPlane(0), clipPlane(1), clipPlane(2),
+                    clipPlane(3));
 
   shader.SetUniform("widthInTiles", int(mesh.atlas.width / tileSize));
 
-  if(renderSpherical){
+  if (renderSpherical) {
     shader.SetUniform("MV", cam.GetModelViewMatrix());
     shader.SetUniform("baseline", baseline);
     shader.SetUniform("leftRight", lrC);
   }
-
 
   glActiveTexture(GL_TEXTURE0);
   mesh.atlas.Bind();
@@ -139,13 +131,15 @@ void PTexMesh::RenderSubMesh(
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mesh.abo.bo);
 
   mesh.vbo.Bind();
-  glVertexAttribPointer(0, mesh.vbo.count_per_element, mesh.vbo.datatype, GL_FALSE, 0, 0);
+  glVertexAttribPointer(0, mesh.vbo.count_per_element, mesh.vbo.datatype,
+                        GL_FALSE, 0, 0);
   glEnableVertexAttribArray(0);
   mesh.vbo.Unbind();
 
   mesh.ibo.Bind();
   // using GL_LINES_ADJACENCY here to send quads to geometry shader
-  glDrawElements(GL_LINES_ADJACENCY, mesh.ibo.num_elements, mesh.ibo.datatype, 0);
+  glDrawElements(GL_LINES_ADJACENCY, mesh.ibo.num_elements, mesh.ibo.datatype,
+                 0);
   mesh.ibo.Unbind();
 
   glDisableVertexAttribArray(0);
@@ -158,34 +152,34 @@ void PTexMesh::RenderSubMesh(
 }
 
 // render depth
-void PTexMesh::RenderSubMeshDepth(
-    size_t subMesh,
-    const pangolin::OpenGlRenderState& cam,
-    const float depthScale,
-    const Eigen::Vector4f& clipPlane,
-    int lrC ) {
+void PTexMesh::RenderSubMeshDepth(size_t subMesh,
+                                  const pangolin::OpenGlRenderState& cam,
+                                  const float depthScale,
+                                  const Eigen::Vector4f& clipPlane, int lrC) {
   ASSERT(subMesh < meshes.size());
   Mesh& mesh = *meshes[subMesh];
 
-  if(renderSpherical){
+  if (renderSpherical) {
+
     glPushAttrib(GL_POLYGON_BIT);
     // int currFrontFace;
     // glGetIntegerv(GL_FRONT_FACE, &currFrontFace);
-    // //Drawing the faces has the opposite winding order to the GL_LINES_ADJACENCY
-    // glFrontFace(currFrontFace == GL_CW ? GL_CCW : GL_CW);
+    // //Drawing the faces has the opposite winding order to the
+    // GL_LINES_ADJACENCY glFrontFace(currFrontFace == GL_CW ? GL_CCW : GL_CW);
 
     depthShader.Bind();
     depthShader.SetUniform("MVP", cam.GetProjectionModelViewMatrix());
     depthShader.SetUniform("MV", cam.GetModelViewMatrix());
-    depthShader.SetUniform("clipPlane", clipPlane(0), clipPlane(1), clipPlane(2), clipPlane(3));
+    depthShader.SetUniform("clipPlane", clipPlane(0), clipPlane(1),
+                           clipPlane(2), clipPlane(3));
     depthShader.SetUniform("scale", depthScale);
     depthShader.SetUniform("baseline", baseline);
     depthShader.SetUniform("leftRight", lrC);
 
-
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mesh.abo.bo);
     mesh.vbo.Bind();
-    glVertexAttribPointer(0, mesh.vbo.count_per_element, mesh.vbo.datatype, GL_FALSE, 0, 0);
+    glVertexAttribPointer(0, mesh.vbo.count_per_element, mesh.vbo.datatype,
+                          GL_FALSE, 0, 0);
     glEnableVertexAttribArray(0);
     mesh.vbo.Unbind();
 
@@ -195,7 +189,8 @@ void PTexMesh::RenderSubMeshDepth(
 
     mesh.ibo.Bind();
     // using GL_LINES_ADJACENCY here to send quads to geometry shader
-    glDrawElements(GL_LINES_ADJACENCY, mesh.ibo.num_elements, mesh.ibo.datatype, 0);
+    glDrawElements(GL_LINES_ADJACENCY, mesh.ibo.num_elements, mesh.ibo.datatype,
+                   0);
     mesh.ibo.Unbind();
 
     glDisableVertexAttribArray(0);
@@ -204,25 +199,25 @@ void PTexMesh::RenderSubMeshDepth(
 
     glPopAttrib();
 
-
-  }else{
-
+  } else {
     glPushAttrib(GL_POLYGON_BIT);
     int currFrontFace;
     glGetIntegerv(GL_FRONT_FACE, &currFrontFace);
-    //Drawing the faces has the opposite winding order to the GL_LINES_ADJACENCY
+    // Drawing the faces has the opposite winding order to the
+    // GL_LINES_ADJACENCY
     glFrontFace(currFrontFace == GL_CW ? GL_CCW : GL_CW);
 
     depthShader.Bind();
     depthShader.SetUniform("MVP", cam.GetProjectionModelViewMatrix());
     depthShader.SetUniform("MV", cam.GetModelViewMatrix());
-    depthShader.SetUniform("clipPlane", clipPlane(0), clipPlane(1), clipPlane(2), clipPlane(3));
+    depthShader.SetUniform("clipPlane", clipPlane(0), clipPlane(1),
+                           clipPlane(2), clipPlane(3));
     depthShader.SetUniform("scale", depthScale);
-
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mesh.abo.bo);
     mesh.vbo.Bind();
-    glVertexAttribPointer(0, mesh.vbo.count_per_element, mesh.vbo.datatype, GL_FALSE, 0, 0);
+    glVertexAttribPointer(0, mesh.vbo.count_per_element, mesh.vbo.datatype,
+                          GL_FALSE, 0, 0);
     glEnableVertexAttribArray(0);
     mesh.vbo.Unbind();
 
@@ -232,37 +227,36 @@ void PTexMesh::RenderSubMeshDepth(
 
     // mesh.ibo.Bind();
     // // using GL_LINES_ADJACENCY here to send quads to geometry shader
-    // glDrawElements(GL_LINES_ADJACENCY, mesh.ibo.num_elements, mesh.ibo.datatype, 0);
-    // mesh.ibo.Unbind();
+    // glDrawElements(GL_LINES_ADJACENCY, mesh.ibo.num_elements,
+    // mesh.ibo.datatype, 0); mesh.ibo.Unbind();
 
     glDisableVertexAttribArray(0);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, 0);
     depthShader.Unbind();
 
     glPopAttrib();
-
-
-
   }
 }
 
-void PTexMesh::Render(const pangolin::OpenGlRenderState& cam, const Eigen::Vector4f& clipPlane, int lrC) {
+void PTexMesh::Render(const pangolin::OpenGlRenderState& cam,
+                      const Eigen::Vector4f& clipPlane, int lrC) {
   for (size_t i = 0; i < meshes.size(); i++) {
     RenderSubMesh(i, cam, clipPlane, lrC);
   }
 }
 
-void PTexMesh::RenderDepth(const pangolin::OpenGlRenderState& cam, const float depthScale, const Eigen::Vector4f& clipPlane, int lrC) {
+void PTexMesh::RenderDepth(const pangolin::OpenGlRenderState& cam,
+                           const float depthScale,
+                           const Eigen::Vector4f& clipPlane, int lrC) {
   for (size_t i = 0; i < meshes.size(); i++) {
     RenderSubMeshDepth(i, cam, depthScale, clipPlane, lrC);
   }
 }
 
-void PTexMesh::RenderWireframe(
-        const pangolin::OpenGlRenderState& cam,
-        const Eigen::Vector4f& clipPlane) {
-  const bool doClip =
-      !(clipPlane(0) == 0.f && clipPlane(1) == 0.f && clipPlane(2) == 0.f && clipPlane(3) == 0.f);
+void PTexMesh::RenderWireframe(const pangolin::OpenGlRenderState& cam,
+                               const Eigen::Vector4f& clipPlane) {
+  const bool doClip = !(clipPlane(0) == 0.f && clipPlane(1) == 0.f &&
+                        clipPlane(2) == 0.f && clipPlane(3) == 0.f);
 
   GLdouble eqn[4] = {clipPlane(0), clipPlane(1), clipPlane(2), clipPlane(3)};
 
@@ -285,12 +279,14 @@ void PTexMesh::RenderWireframe(
 
   for (size_t i = 0; i < meshes.size(); i++) {
     meshes[i]->vbo.Bind();
-    glVertexPointer(meshes[i]->vbo.count_per_element, meshes[i]->vbo.datatype, 0, 0);
+    glVertexPointer(meshes[i]->vbo.count_per_element, meshes[i]->vbo.datatype,
+                    0, 0);
     glEnableClientState(GL_VERTEX_ARRAY);
 
     meshes[i]->ibo.Bind();
 
-    glDrawElements(GL_QUADS, meshes[i]->ibo.num_elements, meshes[i]->ibo.datatype, 0);
+    glDrawElements(GL_QUADS, meshes[i]->ibo.num_elements,
+                   meshes[i]->ibo.datatype, 0);
 
     meshes[i]->ibo.Unbind();
 
@@ -309,12 +305,13 @@ void PTexMesh::RenderWireframe(
   glPopAttrib();
 }
 
-std::vector<MeshData> PTexMesh::SplitMesh(const MeshData& mesh, const float splitSize) {
+std::vector<MeshData> PTexMesh::SplitMesh(const MeshData& mesh,
+                                          const float splitSize) {
   std::vector<uint32_t> verts;
   verts.resize(mesh.vbo.size());
 
   auto Part1By2 = [](uint64_t x) {
-    x &= 0x1fffff; // mask off lower 21 bits
+    x &= 0x1fffff;  // mask off lower 21 bits
     x = (x | (x << 32)) & 0x1f00000000ffff;
     x = (x | (x << 16)) & 0x1f0000ff0000ff;
     x = (x | (x << 8)) & 0x100f00f00f00f00f;
@@ -327,17 +324,17 @@ std::vector<MeshData> PTexMesh::SplitMesh(const MeshData& mesh, const float spli
     return (Part1By2(v(2)) << 2) + (Part1By2(v(1)) << 1) + Part1By2(v(0));
   };
 
-  Eigen::AlignedBox3f boundingBox;
+  // Eigen::AlignedBox3f boundingBox;
 
   for (size_t i = 0; i < mesh.vbo.Area(); i++) {
-    boundingBox.extend(mesh.vbo[i].head<3>());
+    origin_mesh_bbox_.extend(mesh.vbo[i].head<3>());
   }
 
 // calculate vertex grid position and code
 #pragma omp parallel for
   for (size_t i = 0; i < mesh.vbo.size(); i++) {
     const Eigen::Vector3f p = mesh.vbo[i].head<3>();
-    Eigen::Vector3f pi = (p - boundingBox.min()) / splitSize;
+    Eigen::Vector3f pi = (p - origin_mesh_bbox_.min()) / splitSize;
     verts[i] = EncodeMorton3(pi.cast<int>());
   }
 
@@ -366,9 +363,10 @@ std::vector<MeshData> PTexMesh::SplitMesh(const MeshData& mesh, const float spli
   }
 
   // sort faces by code
-  std::sort(faces.begin(), faces.end(), [](const SortFace& f1, const SortFace& f2) -> bool {
-    return (f1.code < f2.code);
-  });
+  std::sort(faces.begin(), faces.end(),
+            [](const SortFace& f1, const SortFace& f2) -> bool {
+              return (f1.code < f2.code);
+            });
 
   // find face chunk start indices
   std::vector<uint32_t> chunkStart;
@@ -387,8 +385,7 @@ std::vector<MeshData> PTexMesh::SplitMesh(const MeshData& mesh, const float spli
   size_t maxFaces = 0;
   for (size_t i = 0; i < numChunks; i++) {
     uint32_t chunkSize = chunkStart[i + 1] - chunkStart[i];
-    if (chunkSize > maxFaces)
-      maxFaces = chunkSize;
+    if (chunkSize > maxFaces) maxFaces = chunkSize;
   }
 
   // create new mesh for each chunk of faces
@@ -440,7 +437,8 @@ std::vector<MeshData> PTexMesh::SplitMesh(const MeshData& mesh, const float spli
   return subMeshes;
 }
 
-void PTexMesh::CalculateAdjacency(const MeshData& mesh, std::vector<uint32_t>& adjFaces) {
+void PTexMesh::CalculateAdjacency(const MeshData& mesh,
+                                  std::vector<uint32_t>& adjFaces) {
   struct EdgeData {
     EdgeData(int f, int e) : face(f), edge(e) {}
     int face;
@@ -453,7 +451,8 @@ void PTexMesh::CalculateAdjacency(const MeshData& mesh, std::vector<uint32_t>& a
 
   size_t numFaces = mesh.ibo.size() / mesh.polygonStride;
 
-  pangolin::ManagedImage<std::unordered_map<uint64_t, std::vector<EdgeData>>::iterator>
+  pangolin::ManagedImage<
+      std::unordered_map<uint64_t, std::vector<EdgeData>>::iterator>
       edgeIterators(mesh.polygonStride, numFaces);
 
   // for each face
@@ -462,8 +461,10 @@ void PTexMesh::CalculateAdjacency(const MeshData& mesh, std::vector<uint32_t>& a
     for (int e = 0; e < (int)mesh.polygonStride; e++) {
       // add to edge to face map
       const uint32_t i0 = mesh.ibo[f * mesh.polygonStride + e];
-      const uint32_t i1 = mesh.ibo[f * mesh.polygonStride + ((e + 1) % mesh.polygonStride)];
-      const uint64_t key = (uint64_t)std::min(i0, i1) << 32 | (uint32_t)std::max(i0, i1);
+      const uint32_t i1 =
+          mesh.ibo[f * mesh.polygonStride + ((e + 1) % mesh.polygonStride)];
+      const uint64_t key =
+          (uint64_t)std::min(i0, i1) << 32 | (uint32_t)std::max(i0, i1);
 
       const EdgeData edgeData(f, e);
 
@@ -492,8 +493,7 @@ void PTexMesh::CalculateAdjacency(const MeshData& mesh, std::vector<uint32_t>& a
       // find adjacent face
       int adjFace = -1;
       for (size_t i = 0; i < adj.size(); i++) {
-        if (adj[i].face != (int)f)
-          adjFace = adj[i].face;
+        if (adj[i].face != (int)f) adjFace = adj[i].face;
       }
 
       // find number of 90 degree rotation steps between faces
@@ -512,7 +512,8 @@ void PTexMesh::CalculateAdjacency(const MeshData& mesh, std::vector<uint32_t>& a
       }
 
       // pack adjacent face and rotation into 32-bit int
-      adjFaces[f * mesh.polygonStride + e] = (rot << ROTATION_SHIFT) | (adjFace & FACE_MASK);
+      adjFaces[f * mesh.polygonStride + e] =
+          (rot << ROTATION_SHIFT) | (adjFace & FACE_MASK);
     }
   }
 }
@@ -538,26 +539,27 @@ void PTexMesh::LoadMeshData(const std::string& meshFile) {
 
   // Upload mesh data to GPU
   for (size_t i = 0; i < splitMeshData.size(); i++) {
-    std::cout << "\rLoading mesh " << i + 1 << "/" << splitMeshData.size() << "... ";
+    std::cout << "\rLoading mesh " << i + 1 << "/" << splitMeshData.size()
+              << "... ";
     std::cout.flush();
 
     meshes.emplace_back(new Mesh);
 
-    meshes.back()->vbo.Reinitialise(
-        pangolin::GlArrayBuffer, splitMeshData[i].vbo.Area(), GL_FLOAT, 4, GL_STATIC_DRAW);
+    meshes.back()->vbo.Reinitialise(pangolin::GlArrayBuffer,
+                                    splitMeshData[i].vbo.Area(), GL_FLOAT, 4,
+                                    GL_STATIC_DRAW);
     meshes.back()->vbo.Upload(
-        splitMeshData[i].vbo.ptr, splitMeshData[i].vbo.Area() * sizeof(Eigen::Vector4f));
-    meshes.back()->ibo.Reinitialise(
-        pangolin::GlElementArrayBuffer,
-        splitMeshData[i].ibo.Area(),
-        GL_UNSIGNED_INT,
-        1,
-        GL_STATIC_DRAW);
+        splitMeshData[i].vbo.ptr,
+        splitMeshData[i].vbo.Area() * sizeof(Eigen::Vector4f));
+    meshes.back()->ibo.Reinitialise(pangolin::GlElementArrayBuffer,
+                                    splitMeshData[i].ibo.Area(),
+                                    GL_UNSIGNED_INT, 1, GL_STATIC_DRAW);
     meshes.back()->ibo.Upload(
-        splitMeshData[i].ibo.ptr, splitMeshData[i].ibo.Area() * sizeof(unsigned int));
+        splitMeshData[i].ibo.ptr,
+        splitMeshData[i].ibo.Area() * sizeof(unsigned int));
   }
-  std::cout << "\rLoading mesh " << splitMeshData.size() << "/" << splitMeshData.size()
-            << "... done" << std::endl;
+  std::cout << "\rLoading mesh " << splitMeshData.size() << "/"
+            << splitMeshData.size() << "... done" << std::endl;
 
   std::cout << "Calculating mesh adjacency... ";
   std::cout.flush();
@@ -570,9 +572,10 @@ void PTexMesh::LoadMeshData(const std::string& meshFile) {
   }
 
   for (size_t i = 0; i < splitMeshData.size(); i++) {
-    meshes[i]->abo.Reinitialise(
-        pangolin::GlShaderStorageBuffer, adjFaces[i].size(), GL_INT, 1, GL_STATIC_DRAW);
-    meshes[i]->abo.Upload(adjFaces[i].data(), sizeof(uint32_t) * adjFaces[i].size());
+    meshes[i]->abo.Reinitialise(pangolin::GlShaderStorageBuffer,
+                                adjFaces[i].size(), GL_INT, 1, GL_STATIC_DRAW);
+    meshes[i]->abo.Upload(adjFaces[i].data(),
+                          sizeof(uint32_t) * adjFaces[i].size());
   }
   std::cout << "done" << std::endl;
 }
@@ -581,9 +584,12 @@ void PTexMesh::LoadAtlasData(const std::string& atlasFolder) {
   isHdr = false;
   // Upload atlas data to GPU
   for (size_t i = 0; i < meshes.size(); i++) {
-    const std::string dxtFile = atlasFolder + "/" + std::to_string(i) + "-color-ptex.dxt1";
-    const std::string rgbFile = atlasFolder + "/" + std::to_string(i) + "-color-ptex.rgb";
-    const std::string hdrFile = atlasFolder + "/" + std::to_string(i) + "-color-ptex.hdr";
+    const std::string dxtFile =
+        atlasFolder + "/" + std::to_string(i) + "-color-ptex.dxt1";
+    const std::string rgbFile =
+        atlasFolder + "/" + std::to_string(i) + "-color-ptex.rgb";
+    const std::string hdrFile =
+        atlasFolder + "/" + std::to_string(i) + "-color-ptex.hdr";
 
     if (pangolin::FileExists(dxtFile)) {
       const size_t numBytes = std::experimental::filesystem::file_size(dxtFile);
@@ -591,53 +597,54 @@ void PTexMesh::LoadAtlasData(const std::string& atlasFolder) {
       // We know it's square
       const size_t dim = std::sqrt(numBytes * 2);
 
-      meshes[i]->atlas.Reinitialise(
-          dim, dim, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, false, 0, GL_RGBA, GL_UNSIGNED_BYTE);
+      meshes[i]->atlas.Reinitialise(dim, dim, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,
+                                    false, 0, GL_RGBA, GL_UNSIGNED_BYTE);
     } else if (pangolin::FileExists(rgbFile)) {
       const size_t numBytes = std::experimental::filesystem::file_size(rgbFile);
 
       // We know it's square
       const size_t dim = std::sqrt(numBytes / 3);
 
-      meshes[i]->atlas.Reinitialise(dim, dim, GL_RGBA8, true, 0, GL_RGB, GL_UNSIGNED_BYTE);
+      meshes[i]->atlas.Reinitialise(dim, dim, GL_RGBA8, true, 0, GL_RGB,
+                                    GL_UNSIGNED_BYTE);
     } else if (pangolin::FileExists(hdrFile)) {
       const size_t numBytes = std::experimental::filesystem::file_size(hdrFile);
 
       // We know it's square
       const size_t dim = std::sqrt(numBytes / 6);
 
-      meshes[i]->atlas.Reinitialise(dim, dim, GL_RGBA16F, false, 0, GL_RGB, GL_HALF_FLOAT);
+      meshes[i]->atlas.Reinitialise(dim, dim, GL_RGBA16F, false, 0, GL_RGB,
+                                    GL_HALF_FLOAT);
       isHdr = true;
     } else {
-      ASSERT(false, "Can't parse texture filename " + atlasFolder + "/" + std::to_string(i));
+      ASSERT(false, "Can't parse texture filename " + atlasFolder + "/" +
+                        std::to_string(i));
     }
   }
 
   for (size_t i = 0; i < meshes.size(); i++) {
     std::cout << "\rLoading atlas " << i + 1 << "/" << meshes.size() << "... ";
     std::cout.flush();
-    const std::string dxtFile = atlasFolder + "/" + std::to_string(i) + "-color-ptex.dxt1";
-    const std::string rgbFile = atlasFolder + "/" + std::to_string(i) + "-color-ptex.rgb";
-    const std::string hdrFile = atlasFolder + "/" + std::to_string(i) + "-color-ptex.hdr";
+    const std::string dxtFile =
+        atlasFolder + "/" + std::to_string(i) + "-color-ptex.dxt1";
+    const std::string rgbFile =
+        atlasFolder + "/" + std::to_string(i) + "-color-ptex.rgb";
+    const std::string hdrFile =
+        atlasFolder + "/" + std::to_string(i) + "-color-ptex.hdr";
 
     if (pangolin::FileExists(dxtFile)) {
       const size_t numBytes = std::experimental::filesystem::file_size(dxtFile);
 
       // Open file
       int fd = open(std::string(dxtFile).c_str(), O_RDONLY, 0);
-      void* mmappedData = mmap(NULL, numBytes, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
+      void* mmappedData =
+          mmap(NULL, numBytes, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
 
       meshes[i]->atlas.Bind();
-      glCompressedTexSubImage2D(
-          GL_TEXTURE_2D,
-          0,
-          0,
-          0,
-          meshes[i]->atlas.width,
-          meshes[i]->atlas.height,
-          GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,
-          numBytes,
-          mmappedData);
+      glCompressedTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, meshes[i]->atlas.width,
+                                meshes[i]->atlas.height,
+                                GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, numBytes,
+                                mmappedData);
       CheckGlDieOnError();
 
       munmap(mmappedData, numBytes);
@@ -647,7 +654,8 @@ void PTexMesh::LoadAtlasData(const std::string& atlasFolder) {
 
       // Open file
       int fd = open(std::string(rgbFile).c_str(), O_RDONLY, 0);
-      void* mmappedData = mmap(NULL, numBytes, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
+      void* mmappedData =
+          mmap(NULL, numBytes, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
 
       meshes[i]->atlas.Upload(mmappedData, GL_RGB, GL_UNSIGNED_BYTE);
 
@@ -658,16 +666,18 @@ void PTexMesh::LoadAtlasData(const std::string& atlasFolder) {
 
       // Open file
       int fd = open(std::string(hdrFile).c_str(), O_RDONLY, 0);
-      void* mmappedData = mmap(NULL, numBytes, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
+      void* mmappedData =
+          mmap(NULL, numBytes, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
 
       meshes[i]->atlas.Upload(mmappedData, GL_RGB, GL_HALF_FLOAT);
 
       munmap(mmappedData, numBytes);
       close(fd);
     } else {
-      ASSERT(false, "Can't parse texture filename " + atlasFolder + "/" + std::to_string(i));
+      ASSERT(false, "Can't parse texture filename " + atlasFolder + "/" +
+                        std::to_string(i));
     }
   }
-  std::cout << "\rLoading atlas " << meshes.size() << "/" << meshes.size() << "... done"
-            << std::endl;
+  std::cout << "\rLoading atlas " << meshes.size() << "/" << meshes.size()
+            << "... done" << std::endl;
 }

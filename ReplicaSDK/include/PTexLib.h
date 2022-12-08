@@ -3,6 +3,7 @@
 #include <pangolin/display/opengl_render_state.h>
 #include <pangolin/gl/gl.h>
 #include <pangolin/gl/glsl.h>
+
 #include <memory>
 #include <string>
 
@@ -14,37 +15,33 @@
 
 class PTexMesh {
  public:
-  PTexMesh(const std::string& meshFile, const std::string& atlasFolder, bool renderSpherical);
+  PTexMesh(const std::string& meshFile, const std::string& atlasFolder,
+           bool renderSpherical);
 
   virtual ~PTexMesh();
 
-  void RenderSubMesh(
-      size_t subMesh,
-      const pangolin::OpenGlRenderState& cam,
-      const Eigen::Vector4f& clipPlane,
-      int lrC = 0);
+  void RenderSubMesh(size_t subMesh, const pangolin::OpenGlRenderState& cam,
+                     const Eigen::Vector4f& clipPlane, int lrC = 0);
 
-  void RenderSubMeshDepth(
-      size_t subMesh,
-      const pangolin::OpenGlRenderState& cam,
-      const float depthScale,
-      const Eigen::Vector4f& clipPlane,
-      int lrC = 0);
+  void RenderSubMeshDepth(size_t subMesh,
+                          const pangolin::OpenGlRenderState& cam,
+                          const float depthScale,
+                          const Eigen::Vector4f& clipPlane, int lrC = 0);
 
-  void Render(
-      const pangolin::OpenGlRenderState& cam,
-      const Eigen::Vector4f& clipPlane = Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f),
-      int lrC = 0);
+  void Render(const pangolin::OpenGlRenderState& cam,
+              const Eigen::Vector4f& clipPlane = Eigen::Vector4f(0.0f, 0.0f,
+                                                                 0.0f, 0.0f),
+              int lrC = 0);
 
-  void RenderWireframe(
-      const pangolin::OpenGlRenderState& cam,
-      const Eigen::Vector4f& clipPlane = Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f));
+  void RenderWireframe(const pangolin::OpenGlRenderState& cam,
+                       const Eigen::Vector4f& clipPlane =
+                           Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f));
 
-  void RenderDepth(
-    const pangolin::OpenGlRenderState& cam,
-    const float depthScale=1.0f,
-    const Eigen::Vector4f& clipPlane = Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f),
-    int lrC = 0);
+  void RenderDepth(const pangolin::OpenGlRenderState& cam,
+                   const float depthScale = 1.0f,
+                   const Eigen::Vector4f& clipPlane =
+                       Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f),
+                   int lrC = 0);
 
   float Exposure() const;
   void SetExposure(const float& val);
@@ -57,10 +54,9 @@ class PTexMesh {
 
   void SetBaseline(const float& val);
 
+  size_t GetNumSubMeshes() { return meshes.size(); }
 
-  size_t GetNumSubMeshes() {
-    return meshes.size();
-  }
+  const Eigen::AlignedBox3f& GetOriginMeshBBox() { return origin_mesh_bbox_; }
 
  private:
   struct Mesh {
@@ -70,8 +66,9 @@ class PTexMesh {
     pangolin::GlBuffer abo;
   };
 
-  static std::vector<MeshData> SplitMesh(const MeshData& mesh, const float splitSize);
-  static void CalculateAdjacency(const MeshData& mesh, std::vector<uint32_t>& adjFaces);
+  std::vector<MeshData> SplitMesh(const MeshData& mesh, const float splitSize);
+  static void CalculateAdjacency(const MeshData& mesh,
+                                 std::vector<uint32_t>& adjFaces);
 
   void LoadMeshData(const std::string& meshFile);
   void LoadAtlasData(const std::string& atlasFolder);
@@ -79,7 +76,7 @@ class PTexMesh {
   float splitSize = 0.0f;
   uint32_t tileSize = 0;
 
-  bool renderSpherical=false;
+  bool renderSpherical = false;
 
   pangolin::GlSlProgram shader;
   pangolin::GlSlProgram depthShader;
@@ -90,6 +87,7 @@ class PTexMesh {
   float baseline = 0.064f;
   bool isHdr = false;
 
+  Eigen::AlignedBox3f origin_mesh_bbox_;
 
   static constexpr int ROTATION_SHIFT = 30;
   static constexpr int FACE_MASK = 0x3FFFFFFF;
