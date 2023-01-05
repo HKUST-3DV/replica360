@@ -12,6 +12,10 @@ file(GLOB hdrs include/*.h)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -msse2 -msse3 -Wall -std=c++11 -fopenmp -DSHADER_DIR=${PTEX_SHADER_DIR}")
 
+# find glog
+find_package(glog REQUIRED)
+include_directories(${GLOG_INCLUDE_DIRS})
+
 add_library(ptex SHARED
             ${srcs_ptex}
             ${hdrs}
@@ -46,7 +50,7 @@ target_link_libraries(ReplicaViewer
                       stdc++fs
 )
 
-add_executable(ReplicaRendererDataset src/render_dataset.cpp src/MirrorSurface.cpp)
+add_executable(ReplicaRendererDataset src/render_dataset.cpp src/MirrorSurface.cpp src/file_system_tools.cpp)
 
 target_link_libraries(ReplicaRendererDataset
                       ${Pangolin_LIBRARIES}
@@ -55,6 +59,7 @@ target_link_libraries(ReplicaRendererDataset
                       GLEW
                       ptex
                       stdc++fs
+                      glog
 )
 
 add_executable(ReplicaVideoRenderer src/render_video.cpp src/MirrorSurface.cpp)
@@ -146,3 +151,13 @@ target_link_libraries(DepthMeshRendererLayeredBatch
                       ptex
                       stdc++fs
 )
+
+add_executable(test_eigen src/test_eigen.cpp)
+target_include_directories(test_eigen PUBLIC
+            ${Eigen_INCLUDE_DIRS}
+            ${dl_INCLUDE_DIRS}
+            ${CMAKE_CURRENT_LIST_DIR}
+)
+target_link_libraries(test_eigen                       
+                    ${Eigen_LIBRARIES}
+                    ${dl_LIBRARIES})

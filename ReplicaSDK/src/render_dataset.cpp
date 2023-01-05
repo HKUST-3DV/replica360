@@ -1,65 +1,69 @@
 // Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 #define cimg_display 0
 
+#include <DepthMeshLib.h>
 #include <EGL.h>
 #include <PTexLib.h>
+#include <glog/logging.h>
 #include <pangolin/image/image_convert.h>
 
 #include <Eigen/Geometry>
-#include <string>
-// #include "MirrorRenderer.h"
-#include <DepthMeshLib.h>
-
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <random>
+#include <string>
 
+#include "file_system_tools.h"
 
 const bool b_render_depth = true;
-const float k_depth_scale = 1000.f;
+const bool b_render_equirect = true;
+const float k_depth_scale = 4000.f;
 
 // load camera trajectory file
-// FORMAT:
-//  cam_position_x, cam_position_y, cam_position_z, ods, baseline,
-//(interpolate) translate_x,       translate_y,       translate_z,
-//(Rextrapolate)translate_x,       translate_y,       translate_z,
-//(Lextrapolate)translate_x,       translate_y,       translate_z,
+// camera trajectory in camera frame: t_c_w
 std::vector<std::vector<float>> readCameraTrajectory(
     const std::string& cam_position_file, const Eigen::Vector3f& bbox_min,
     const Eigen::Vector3f& bbox_max) {
-  const float padding = 0.5f;
   std::vector<std::vector<float>> v_cam_position;
-  // Eigen::Vector3f gravity_center(2.4068353176116943, 1.1334284543991089,
-  //                                -1.4962862730026245);
-  std::fstream in(cam_position_file);
+
+  std::ifstream in(cam_position_file);
+  if (!in.is_open()) {
+    LOG(FATAL) << "Fail to open file " << cam_position_file;
+  }
   std::string line;
   while (std::getline(in, line)) {
-    float value;
+    float pos_x, pos_y, pos_z;
     std::stringstream ss(line);
-    std::vector<float> cam_position;
 
-    while (ss >> value) {
-      cam_position.push_back(value);
-    }
-    // cam_position[0] -= gravity_center[0];
-    // cam_position[1] -= gravity_center[1];
-    // cam_position[2] -= gravity_center[2];
-    // fix the Y value to 1.6m
-    cam_position[1] = 1.6f;
+    ss >> pos_x >> pos_y >> pos_z;
 
-    if ((cam_position[0] > bbox_min[0] + padding) &&
-        (cam_position[0] < bbox_max[0] - padding) &&
-        (cam_position[1] > bbox_min[2] + padding) &&
-        (cam_position[1] < bbox_max[2] - padding) &&
-        (cam_position[2] > bbox_min[1] + padding) &&
-        (cam_position[2] < bbox_max[1] - padding)) {
-      v_cam_position.push_back(cam_position);
-    }
+    std::vector<float> cam_position = {pos_x, pos_y, pos_z};
+
+    // // fix the Y value to 1.6m
+    // cam_position[1] = 1.6f;
+    v_cam_position.push_back(cam_position);
+  }
+  // std::cout << "camera trajectory lens: " << v_cam_position.size() << "\n";
+  return v_cam_position;
+}
+
+// save camera pose to file
+bool saveCameraPose(const std::string &filepath, const Eigen::Matrix4d &T_w_c) {
+  std::ofstream ofs(filepath);
+  if (!ofs.is_open()){
+    LOG(FATAL) << "Fail to open file : " << filepath;
+    return false;
   }
 
-  return v_cam_position;
+  Eigen::Quaterniond q_w_c(T_w_c.block<3, 3>(0, 0));
+  Eigen::Vector3d t_w_c = T_w_c.block<3, 1>(0, 3);
+  // tx ty tz qx qy qz qw
+  ofs << t_w_c[0] << " " << t_w_c[1] << " " << t_w_c[2] << " " << q_w_c.x() << " " << q_w_c.y() << " " << q_w_c.z() << " " << q_w_c.w() << "\n";
+  ofs.close();
+
+  return true;
 }
 
 int main(int argc, char* argv[]) {
@@ -78,13 +82,14 @@ int main(int argc, char* argv[]) {
   int img_width = std::stoi(std::string(argv[5]));
   int img_height = std::stoi(std::string(argv[6]));
 
-  ASSERT(pangolin::FileExists(mesh_filepath));
-  ASSERT(pangolin::FileExists(texture_folderpath));
-  ASSERT(pangolin::FileExists(output_folderpath));
-  ASSERT(pangolin::FileExists(cam_pose_filepath));
+  ASSERT(common::fileExists(mesh_filepath));
+  ASSERT(common::pathExists(texture_folderpath));
+  ASSERT(common::fileExists(cam_pose_filepath));
+  if (!common::pathExists(output_folderpath)) {
+    common::createPath(output_folderpath);
+  }
 
-  bool b_have_nav_cam = false;
-  if (pangolin::FileExists(cam_pose_filepath)) b_have_nav_cam = true;
+  bool b_have_nav_cam = true;
 
   std::string scene_name;
   {  // get scene name
@@ -129,7 +134,6 @@ int main(int argc, char* argv[]) {
   R_down = d.matrix();
 
   // load mesh and textures
-  bool b_render_equirect = true;
   PTexMesh ptexMesh(mesh_filepath, texture_folderpath, b_render_equirect);
   pangolin::ManagedImage<Eigen::Matrix<uint8_t, 3, 1>> image(img_width, img_height);
   pangolin::ManagedImage<float> depthImage(img_width, img_height);
@@ -140,22 +144,25 @@ int main(int argc, char* argv[]) {
   Eigen::Vector3f mesh_bbox_max = ptexMesh.GetOriginMeshBBox().max();
   std::cout << "origin mesh bbox: min: " << mesh_bbox_min.transpose()
             << " , max: " << mesh_bbox_max.transpose() << "\n";
-  // load camera trajectory 
+  // load camera trajectory
   std::vector<std::vector<float>> v_cam_position;
   if (b_have_nav_cam) {
-    v_cam_position = readCameraTrajectory(cam_pose_filepath, mesh_bbox_min, mesh_bbox_max);
+    v_cam_position =
+        readCameraTrajectory(cam_pose_filepath, mesh_bbox_min, mesh_bbox_max);
   }
 
   size_t numSpots = 100;
   if (b_have_nav_cam) {
     numSpots = v_cam_position.size();
   }
+  std::cout << "Spots number: " << numSpots << "\n";
   srand(2019);  // random seed
 
   // Setup a camera in GL coordinate system
   Eigen::Vector3f eye(0.0, 1.6, 0.0);
   if (b_have_nav_cam) {
-    eye = Eigen::Vector3f(v_cam_position[0][0], v_cam_position[0][1], v_cam_position[0][2]);
+    eye = Eigen::Vector3f(v_cam_position[0][0], v_cam_position[0][1],
+                          v_cam_position[0][2]);
     std::cout << "First camera position:" << eye[0] << " " << eye[1] << " "
               << eye[2] << "\n";
   }
@@ -171,7 +178,7 @@ int main(int argc, char* argv[]) {
                                    center[2], up[0], up[1], up[2]));
 
   // Start at some origin
-  Eigen::Matrix4d T_world_cam = s_cam.GetModelViewMatrix();
+  Eigen::Matrix4d T_cam_world = s_cam.GetModelViewMatrix();
 
   // rendering the dataset
   for (size_t j = 0; j < numSpots; j++) {
@@ -198,19 +205,26 @@ int main(int argc, char* argv[]) {
 
       // Download and save
       render.Download(image.ptr, GL_RGB, GL_UNSIGNED_BYTE);
-      char equirectFilename[1000];
-      snprintf(equirectFilename, 1000, "%s/%s_%ld.jpeg",
-               output_folderpath.c_str(), scene_name.c_str(), j);
+      char img_file_folder[1000];
+      snprintf(img_file_folder, 1000, "%s/%s/%05ld", output_folderpath.c_str(),
+               scene_name.c_str(), j);
+      if (!common::pathExists(img_file_folder)) {
+        common::createPath(img_file_folder);
+      }
+      std::string img_file_path = std::string(img_file_folder) + "/rgb.png";
       pangolin::SaveImage(image.UnsafeReinterpret<uint8_t>(),
                           pangolin::PixelFormatFromString("RGB24"),
-                          std::string(equirectFilename), 100.0);
+                          img_file_path, 100.0);
 
-    } else if (b_render_equirect) {
-      //
-
-      Eigen::Vector3d curr_cam_pos(v_cam_position[j][0], v_cam_position[j][1], v_cam_position[j][2]);
-      T_world_cam.block<3, 1>(0, 3) = curr_cam_pos;
-      s_cam.GetModelViewMatrix() = T_world_cam;
+    } else {
+      // model_view matrix is T_c_w
+      Eigen::Vector3d curr_cam_pos(v_cam_position[j][0], v_cam_position[j][1],
+                                   v_cam_position[j][2]);
+      T_cam_world.block<3, 1>(0, 3) = curr_cam_pos;
+      // if (j + 1 < numSpots) {
+      //     T_cam_world = R_side * T_cam_world;
+      // }
+      s_cam.GetModelViewMatrix() = T_cam_world;
 
       // Render
       frameBuffer.Bind();
@@ -223,21 +237,34 @@ int main(int argc, char* argv[]) {
 
       // set parameters
       ptexMesh.SetExposure(0.01);
-      ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2);
+      if (b_render_equirect) {
+        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2);
+      } else {
+        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f));
+      }
 
       glDisable(GL_CULL_FACE);
-      glPopAttrib();  
+      glPopAttrib();
       frameBuffer.Unbind();
 
       // Download and save
       render.Download(image.ptr, GL_RGB, GL_UNSIGNED_BYTE);
 
-      char filename[1000];
-      snprintf(filename, 1000, "%s/%s_%04zu.jpeg",
-               output_folderpath.c_str(), scene_name.c_str(), (long unsigned)j);
+      char img_file_folder[1000];
+      snprintf(img_file_folder, 1000, "%s/%s/%05ld", output_folderpath.c_str(), scene_name.c_str(), j);
+      if (!common::pathExists(img_file_folder)) {
+        common::createPath(img_file_folder);
+      }
+      std::string img_file_path = std::string(img_file_folder) + "/rgb.png";
+      // char img_file_path[1000];
+      // snprintf(img_file_path, 1000, "%s/%s_%05ld.png",
+      //          output_folderpath.c_str(), scene_name.c_str(), j);
       pangolin::SaveImage(image.UnsafeReinterpret<uint8_t>(),
                           pangolin::PixelFormatFromString("RGB24"),
-                          std::string(filename), 100.0);
+                          std::string(img_file_path), 100.0);
+
+      std::string pos_filepath = std::string(img_file_folder) + "/pose.txt";
+      saveCameraPose(pos_filepath, T_cam_world.inverse());
 
       if (b_render_depth) {
         // render depth image for the equirect image
@@ -251,14 +278,18 @@ int main(int argc, char* argv[]) {
         ptexMesh.RenderDepth(s_cam, k_depth_scale,
                              Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2);
         glDisable(GL_CULL_FACE);
-        glPopAttrib();  
+        glPopAttrib();
 
         depthFrameBuffer.Unbind();
 
-        char filename[1000];
-        snprintf(filename, 1000, "%s/%s_%04zu.png", output_folderpath.c_str(),
-                 scene_name.c_str(), (long unsigned)j);
-        std::cout << "render depth image to " << filename << "\n";
+        char img_file_folder[1000];
+        snprintf(img_file_folder, 1000, "%s/%s/%05ld",
+                 output_folderpath.c_str(), scene_name.c_str(), j);
+        if (!common::pathExists(img_file_folder)) {
+          common::createPath(img_file_folder);
+        }
+        std::string img_file_path = std::string(img_file_folder) + "/depth.png";
+        // std::cout << "render depth image to " << img_file_path << "\n";
         depthTexture.Download(depthImage.ptr, GL_RED, GL_FLOAT);
 
         // convert to 16-bit int
@@ -267,17 +298,9 @@ int main(int argc, char* argv[]) {
 
         pangolin::SaveImage(depthImageInt.UnsafeReinterpret<uint8_t>(),
                             pangolin::PixelFormatFromString("GRAY16LE"),
-                            std::string(filename), 100.0);
+                            std::string(img_file_path), 100.0);
       }
 
-      if (b_have_nav_cam) {
-        if (j + 1 < numSpots) {
-          T_world_cam = R_side * T_world_cam;
-          s_cam.GetModelViewMatrix() = T_world_cam;
-        }
-      } else {
-        continue;
-      }
       std::cout << "\r Spot " << j + 1 << "/" << numSpots << std::endl;
     }
   }

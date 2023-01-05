@@ -17,5 +17,6 @@ void main()
     c *= exposure;
     applySaturation(c, saturation);
     c.rgb = pow(c.rgb, vec3(gamma));
-    FragColor = vec4(c.rgb, 1.0f);
+    // FragColor = vec4(c.rgb, 1.0f);
+    FragColor = vec4(uv, 0.0f, 1.0f);
 }
