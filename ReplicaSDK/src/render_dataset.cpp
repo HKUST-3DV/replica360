@@ -66,14 +66,42 @@ bool saveCameraPose(const std::string &filepath, const Eigen::Matrix4d &T_w_c) {
   return true;
 }
 
+bool loadMeshTransformationMatrix(const std::string &filepath, Eigen::Matrix4d &T_axis_align) {
+  std::ifstream ifs(filepath);
+  if (!ifs.is_open()){
+    LOG(FATAL) << "Fail to open " << filepath;
+    return false;
+  }
+
+  T_axis_align = Eigen::Matrix4d::Identity();
+
+  int idx = 0;
+  std::string line_str;
+  std::stringstream ss;
+
+  while(!ifs.eof()) {
+    ss.clear();
+    std::getline(ifs, line_str);
+    if (line_str.empty()) continue;
+
+    ss.str(line_str);
+    ss >> T_axis_align(idx, 0) >> T_axis_align(idx, 1) >> T_axis_align(idx, 2) >> T_axis_align(idx, 3);
+    idx ++;
+  }
+
+  ifs.close();
+  std::cout << "load T_aa: \n " << T_axis_align << "\n";
+  return true;
+}
+
 int main(int argc, char* argv[]) {
   auto model_start = std::chrono::high_resolution_clock::now();
   std::cout << argc;
 
   ASSERT(
-      argc == 7,
+      argc == 8,
       "Usage: ./Path/to/ReplicaRenderDataset [mesh.ply] [textures_folderpath]  "
-      "[camera_pose_filepath] [output_directory] [img_width] [img_height] ");
+      "[camera_pose_filepath] [output_directory] [img_width] [img_height] [mesh_transform_filepath]");
 
   const std::string mesh_filepath = argv[1];
   std::string texture_folderpath = argv[2];
@@ -81,10 +109,12 @@ int main(int argc, char* argv[]) {
   std::string output_folderpath = argv[4];
   int img_width = std::stoi(std::string(argv[5]));
   int img_height = std::stoi(std::string(argv[6]));
+  std::string mesh_transform_filepath = argv[7];
 
   ASSERT(common::fileExists(mesh_filepath));
   ASSERT(common::pathExists(texture_folderpath));
   ASSERT(common::fileExists(cam_pose_filepath));
+  ASSERT(common::fileExists(mesh_transform_filepath));
   if (!common::pathExists(output_folderpath)) {
     common::createPath(output_folderpath);
   }
@@ -179,6 +209,9 @@ int main(int argc, char* argv[]) {
 
   // Start at some origin
   Eigen::Matrix4d T_cam_world = s_cam.GetModelViewMatrix();
+  // mesh transformation , to be used in GLSL code
+  Eigen::Matrix4d T_axis_align = Eigen::Matrix4d::Identity();
+  loadMeshTransformationMatrix(mesh_transform_filepath, T_axis_align);
 
   // rendering the dataset
   for (size_t j = 0; j < numSpots; j++) {
@@ -195,9 +228,9 @@ int main(int argc, char* argv[]) {
       // set parameters
       ptexMesh.SetExposure(0.01);
       if (b_render_equirect) {
-        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2);
+        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2, T_axis_align);
       } else {
-        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f));
+        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 0, T_axis_align);
       }
       glDisable(GL_CULL_FACE);
       glPopAttrib();  // GL_VIEWPORT_BIT
@@ -206,8 +239,7 @@ int main(int argc, char* argv[]) {
       // Download and save
       render.Download(image.ptr, GL_RGB, GL_UNSIGNED_BYTE);
       char img_file_folder[1000];
-      snprintf(img_file_folder, 1000, "%s/%s/%05ld", output_folderpath.c_str(),
-               scene_name.c_str(), j);
+      snprintf(img_file_folder, 1000, "%s/%05ld", output_folderpath.c_str(), j);
       if (!common::pathExists(img_file_folder)) {
         common::createPath(img_file_folder);
       }
@@ -238,9 +270,9 @@ int main(int argc, char* argv[]) {
       // set parameters
       ptexMesh.SetExposure(0.01);
       if (b_render_equirect) {
-        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2);
+        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2, T_axis_align);
       } else {
-        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f));
+        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 0, T_axis_align);
       }
 
       glDisable(GL_CULL_FACE);
@@ -251,7 +283,7 @@ int main(int argc, char* argv[]) {
       render.Download(image.ptr, GL_RGB, GL_UNSIGNED_BYTE);
 
       char img_file_folder[1000];
-      snprintf(img_file_folder, 1000, "%s/%s/%05ld", output_folderpath.c_str(), scene_name.c_str(), j);
+      snprintf(img_file_folder, 1000, "%s/%05ld", output_folderpath.c_str(), j);
       if (!common::pathExists(img_file_folder)) {
         common::createPath(img_file_folder);
       }
@@ -276,15 +308,14 @@ int main(int argc, char* argv[]) {
         glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
         glEnable(GL_CULL_FACE);
         ptexMesh.RenderDepth(s_cam, k_depth_scale,
-                             Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2);
+                             Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2, T_axis_align);
         glDisable(GL_CULL_FACE);
         glPopAttrib();
 
         depthFrameBuffer.Unbind();
 
         char img_file_folder[1000];
-        snprintf(img_file_folder, 1000, "%s/%s/%05ld",
-                 output_folderpath.c_str(), scene_name.c_str(), j);
+        snprintf(img_file_folder, 1000, "%s/%05ld", output_folderpath.c_str(), j);
         if (!common::pathExists(img_file_folder)) {
           common::createPath(img_file_folder);
         }

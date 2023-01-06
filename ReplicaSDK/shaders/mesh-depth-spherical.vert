@@ -9,6 +9,7 @@ uniform mat4 MV;
 uniform float baseline;
 uniform vec4 clipPlane;
 uniform int leftRight;
+uniform mat4 T_axis_align;
 
 out float depth;
 
@@ -18,7 +19,7 @@ void main()
     vec4 perspPos = MVP * position;
 
     // Map point to clip space based on equirectangular projection
-    vec3 p = (MV * position).xyz;
+    vec3 p = (MV * T_axis_align * position).xyz;
     depth = abs(length(p.xyz));
 
     float r = min(baseline, max(0,sqrt(p.x*p.x + p.z*p.z)-0.002));

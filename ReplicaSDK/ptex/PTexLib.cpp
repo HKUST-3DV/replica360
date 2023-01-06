@@ -104,7 +104,8 @@ void PTexMesh::SetBaseline(const float& val) { baseline = val; }
 
 void PTexMesh::RenderSubMesh(size_t subMesh,
                              const pangolin::OpenGlRenderState& cam,
-                             const Eigen::Vector4f& clipPlane, int lrC) {
+                             const Eigen::Vector4f& clipPlane, int lrC,
+                             const Eigen::Matrix4d& T_axis_align) {
   ASSERT(subMesh < meshes.size());
   Mesh& mesh = *meshes[subMesh];
 
@@ -118,6 +119,8 @@ void PTexMesh::RenderSubMesh(size_t subMesh,
                     clipPlane(3));
 
   shader.SetUniform("widthInTiles", int(mesh.atlas.width / tileSize));
+  pangolin::OpenGlMatrix T_aa(T_axis_align);
+  shader.SetUniform("T_axis_align", T_aa);
 
   if (renderSpherical) {
     shader.SetUniform("MV", cam.GetModelViewMatrix());
@@ -155,7 +158,8 @@ void PTexMesh::RenderSubMesh(size_t subMesh,
 void PTexMesh::RenderSubMeshDepth(size_t subMesh,
                                   const pangolin::OpenGlRenderState& cam,
                                   const float depthScale,
-                                  const Eigen::Vector4f& clipPlane, int lrC) {
+                                  const Eigen::Vector4f& clipPlane, int lrC,
+                                  const Eigen::Matrix4d& T_axis_align) {
   ASSERT(subMesh < meshes.size());
   Mesh& mesh = *meshes[subMesh];
 
@@ -175,6 +179,10 @@ void PTexMesh::RenderSubMeshDepth(size_t subMesh,
     depthShader.SetUniform("scale", depthScale);
     depthShader.SetUniform("baseline", baseline);
     depthShader.SetUniform("leftRight", lrC);
+
+    pangolin::OpenGlMatrix T_aa(T_axis_align);
+    depthShader.SetUniform("T_axis_align", T_aa);
+
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mesh.abo.bo);
     mesh.vbo.Bind();
@@ -239,17 +247,18 @@ void PTexMesh::RenderSubMeshDepth(size_t subMesh,
 }
 
 void PTexMesh::Render(const pangolin::OpenGlRenderState& cam,
-                      const Eigen::Vector4f& clipPlane, int lrC) {
+                      const Eigen::Vector4f& clipPlane, int lrC, const Eigen::Matrix4d& T_axis_align) {
   for (size_t i = 0; i < meshes.size(); i++) {
-    RenderSubMesh(i, cam, clipPlane, lrC);
+    RenderSubMesh(i, cam, clipPlane, lrC, T_axis_align);
   }
 }
 
 void PTexMesh::RenderDepth(const pangolin::OpenGlRenderState& cam,
                            const float depthScale,
-                           const Eigen::Vector4f& clipPlane, int lrC) {
+                           const Eigen::Vector4f& clipPlane, int lrC,
+                           const Eigen::Matrix4d& T_axis_align) {
   for (size_t i = 0; i < meshes.size(); i++) {
-    RenderSubMeshDepth(i, cam, depthScale, clipPlane, lrC);
+    RenderSubMeshDepth(i, cam, depthScale, clipPlane, lrC, T_axis_align);
   }
 }
 

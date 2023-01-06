@@ -8,13 +8,15 @@ uniform mat4 MV;
 uniform float baseline;
 uniform vec4 clipPlane;
 uniform int leftRight;
+uniform mat4 T_axis_align;
+
 void main()
 {
     gl_ClipDistance[0] = 1;
-    vec4 perspPos = MVP * position;
+    // vec4 perspPos = MVP * R_aa * position;
 
     // Map point to clip space based on equirectangular projection
-    vec3 p = (MV * position).xyz;
+    vec3 p = (MV * T_axis_align * position).xyz;
 
     //using equation from paper
     //float theta;

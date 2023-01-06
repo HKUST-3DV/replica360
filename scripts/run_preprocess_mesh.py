@@ -68,10 +68,15 @@ def translate_mesh(vertices, trans):
 def rotate_mesh(vertices, rot_matrix):
     for vertice in vertices:
         v = np.array([vertice[0], vertice[1], vertice[2]])
+        n = np.array([vertice[3], vertice[4], vertice[5]])
         rot_v = rot_matrix @ v
+        rot_n = rot_matrix @ n
         vertice[0] = rot_v[0]
         vertice[1] = rot_v[1]
         vertice[2] = rot_v[2]
+        vertice[3] = rot_n[0]
+        vertice[4] = rot_n[1]
+        vertice[5] = rot_n[2]
 
 def get_axis_aligned_mesh(mesh_vertices, saved_ply_filepath=None, z_rotation_res=0.1, b_vis=False):
 
@@ -148,6 +153,26 @@ def get_axis_aligned_mesh(mesh_vertices, saved_ply_filepath=None, z_rotation_res
 
     return final_matrix
 
+def save_axis_aligned_mesh_transfomation(filepath, T_axis_align):
+    with open(filepath, 'w') as ofs:
+        for idx in range(len(T_axis_align)):
+            row_data = T_axis_align[idx, :].tolist()
+            line_str = ' '.join([str(data) for data in row_data])
+            ofs.write(line_str)
+            ofs.write('\n')
+
+def load_axis_aligned_mesh_transfomation(filepath):
+    T = np.eye(4)
+    with open(filepath, 'r') as ifs:
+        lines_data = ifs.readlines()
+        for idx in range(len(lines_data)):
+            data = lines_data[idx].strip().split()
+            T[idx, 0] = float(data[0])
+            T[idx, 1] = float(data[1])
+            T[idx, 2] = float(data[2])
+            T[idx, 3] = float(data[3])
+    return T
+
 def transform_and_save_mesh(input_filepath, save_filepath, trans_vector, rot_vec=None, b_axis_aligned_mesh=True):
     mesh = PlyData.read(input_filepath)
     v_vertices = mesh.elements[0]
@@ -160,15 +185,15 @@ def transform_and_save_mesh(input_filepath, save_filepath, trans_vector, rot_vec
         R_grav_pcl = o3d.geometry.get_rotation_matrix_from_axis_angle(rot_vec)
         rotate_mesh(v_vertices, R_grav_pcl)
     if b_axis_aligned_mesh:
-        axis_aligned_mesh_filepath = osp.join(osp.dirname(input_filepath), 'axis_aligned_'+osp.basename(input_filepath))
-        T = get_axis_aligned_mesh(v_vertices, saved_ply_filepath=axis_aligned_mesh_filepath)
+        # axis_aligned_mesh_filepath = osp.join(osp.dirname(input_filepath), 'axis_aligned_'+osp.basename(input_filepath))
+        T = get_axis_aligned_mesh(v_vertices, saved_ply_filepath=None)
         R_axis_align = T[:3,:3]
         rotate_mesh(v_vertices, R_axis_align)
 
     PlyData([v_vertices, v_faces], text=False).write(save_filepath)
 
     if b_axis_aligned_mesh:
-        return R_axis_align
+        return T
     else:
         None
 
@@ -238,9 +263,6 @@ def transform_and_save_cam_trajectory(cam_trajectory_filepath, saved_cam_traject
             rot_g = rot_x_90n @ gravity_center
             # caemra pos in translated habitat frame
             pos_translated = pos - rot_g
-            if rot_vec is not None:
-                print('R_aa:\n', rot_vec)
-                pos_translated = np.linalg.inv(rot_vec) @ pos_translated
 
             # world-frame
             #     /|\ Z
@@ -253,6 +275,8 @@ def transform_and_save_cam_trajectory(cam_trajectory_filepath, saved_cam_traject
             #                   /
             # rotate to world frame
             pos_w = rot_x_90n @ pos_translated
+            if rot_vec is not None:
+                pos_w = rot_vec @ pos_w
 
             # camera-frame
             #     /|\ Z
@@ -392,13 +416,13 @@ def main(dataset_path):
     scene_folders = [f for f in os.listdir(
         dataset_path) if osp.isdir(osp.join(dataset_path, f))]
 
-    b_skip_mesh = True
+    b_skip_mesh = False
     b_skip_semantic_mesh = True
     b_skip_info_semantic_json = True
     b_skip_3dbbox_prior = True
     b_skip_cam_6dof_file = False
     for folder in scene_folders:
-        if folder != 'hotel_0':
+        if folder != 'room_2':
             continue
 
         print(
@@ -421,7 +445,7 @@ def main(dataset_path):
             dataset_path, folder, 'habitat/rotated_info_semantic.json')
         saved_obj_bbox_prior_filepath = osp.join(
             dataset_path, folder, scene_name+'.json')
-        saved_axis_align_mesh_T_filepath = osp.join(dataset_path, folder, 'axis_aligned_transform.npy')
+        saved_axis_align_mesh_T_filepath = osp.join(dataset_path, folder, 'axis_aligned_transform.txt')
 
         assert osp.exists(
             scene_mesh_filepath), f"{scene_mesh_filepath} doesnt exist..."
@@ -438,19 +462,23 @@ def main(dataset_path):
             scene_semantic_filepath)
 
         if osp.exists(saved_axis_align_mesh_T_filepath):
-            R_aa = np.load(saved_axis_align_mesh_T_filepath)
+            # T_aa = np.load(saved_axis_align_mesh_T_filepath)
+            T_aa = load_axis_aligned_mesh_transfomation(saved_axis_align_mesh_T_filepath)
+            print(T_aa)
         else:
-            R_aa = None
+            T_aa = None
 
         if scene_name == 'large_apartment_0':
             gravity_center += np.array([0, 0, -1.07])
 
         # translate the origin of mesh
         if not b_skip_mesh:
-            R_axis_align = transform_and_save_mesh(
+            T_axis_align = transform_and_save_mesh(
                     scene_mesh_filepath, saved_mesh_filepath, gravity_center, rot_vec=None)
-            if R_axis_align is not None:
-                np.save(saved_axis_align_mesh_T_filepath, R_axis_align)
+            print('T_axis_align:\n', T_axis_align)
+            if T_axis_align is not None:
+                # np.save(saved_axis_align_mesh_T_filepath, T_aa)
+                save_axis_aligned_mesh_transfomation(saved_axis_align_mesh_T_filepath, T_axis_align)
 
         if not b_skip_semantic_mesh:
             transform_and_save_mesh(
@@ -463,7 +491,7 @@ def main(dataset_path):
             for idx in range(len(cam_position_filepath)):
 
                 transform_and_save_cam_trajectory(
-                    cam_position_filepath[idx], saved_cam_position_filepath[idx], gravity_center, rot_vec=R_aa)
+                    cam_position_filepath[idx], saved_cam_position_filepath[idx], gravity_center, rot_vec=T_aa[:3,:3])
 
         # translate object
         if not b_skip_info_semantic_json:

@@ -17,19 +17,20 @@ def main(dataset_dir_path, output_dir_path, exe_dir_path):
     img_height = '512'
     for scene in scene_folders:
         if g_running:
-            if scene == 'large_apartment_0':
-                continue
-            scene_ply_filepath = osp.join(dataset_dir_path, scene, scene+'_aligned.ply')
+            # if scene == 'large_apartment_0':
+            #     continue
+            scene_ply_filepath = osp.join(dataset_dir_path, scene, scene+'.ply')
             texture_folderpath = osp.join(dataset_dir_path, scene, 'textures')
             cam_traj_filepath = glob.glob(osp.join(dataset_dir_path, scene, scene+'_trajectory*.txt'))
-            # output_path = osp.join(output_dir_path, scene)
+            mesh_transform_filepath = osp.join(dataset_dir_path, scene, 'axis_aligned_transform.txt')
+            output_path = osp.join(output_dir_path, scene)
 
             scene_idx = 0
             for traj_file in cam_traj_filepath:
-                output_path = osp.join(output_dir_path, '%03d'%(scene_idx))
+                output_path = osp.join(output_dir_path, scene+'_%03d'%(scene_idx))
                 scene_idx += 1
 
-                cmd = [exe_path, scene_ply_filepath, texture_folderpath, traj_file, output_path, img_width, img_height]
+                cmd = [exe_path, scene_ply_filepath, texture_folderpath, traj_file, output_path, img_width, img_height, mesh_transform_filepath]
                 cmd = ' '.join(cmd)
                 print(cmd)
                 os.system(cmd)

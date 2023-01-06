@@ -21,17 +21,20 @@ class PTexMesh {
   virtual ~PTexMesh();
 
   void RenderSubMesh(size_t subMesh, const pangolin::OpenGlRenderState& cam,
-                     const Eigen::Vector4f& clipPlane, int lrC = 0);
+                     const Eigen::Vector4f& clipPlane, int lrC = 0,
+                     const Eigen::Matrix4d& T_axis_align = Eigen::Matrix4d::Identity());
 
   void RenderSubMeshDepth(size_t subMesh,
                           const pangolin::OpenGlRenderState& cam,
                           const float depthScale,
-                          const Eigen::Vector4f& clipPlane, int lrC = 0);
+                          const Eigen::Vector4f& clipPlane, int lrC = 0,
+                          const Eigen::Matrix4d& T_axis_align = Eigen::Matrix4d::Identity());
 
   void Render(const pangolin::OpenGlRenderState& cam,
               const Eigen::Vector4f& clipPlane = Eigen::Vector4f(0.0f, 0.0f,
                                                                  0.0f, 0.0f),
-              int lrC = 0);
+              int lrC = 0,
+              const Eigen::Matrix4d& T_axis_align = Eigen::Matrix4d::Identity());
 
   void RenderWireframe(const pangolin::OpenGlRenderState& cam,
                        const Eigen::Vector4f& clipPlane =
@@ -41,7 +44,8 @@ class PTexMesh {
                    const float depthScale = 1.0f,
                    const Eigen::Vector4f& clipPlane =
                        Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f),
-                   int lrC = 0);
+                   int lrC = 0,
+                   const Eigen::Matrix4d& T_axis_align = Eigen::Matrix4d::Identity());
 
   float Exposure() const;
   void SetExposure(const float& val);
