@@ -29,7 +29,8 @@ class ReplicaXRDatasetConfig(object):
                            'floor_mat': 18, 'clothes': 19, 'books': 20, 'fridge': 21, 'tv': 22,
                            'paper': 23, 'towel': 24, 'shower_curtain': 25, 'box': 26,
                            'whiteboard': 27, 'person': 28, 'nightstand': 29, 'toilet': 30,
-                           'sink': 31, 'lamp': 32, 'bathtub': 33, 'bag': 34, 'stool': 35, 'rug': 36}
+                           'sink': 31, 'lamp': 32, 'bathtub': 33, 'bag': 34, 'stool': 35, 'rug': 36, 'top_lamp': 37, 'trash_can': 38,
+                           'wall_clock': 39}
 
 
 def load_scene_gravity(scene_semantic_file):
@@ -78,24 +79,26 @@ def rotate_mesh(vertices, rot_matrix):
         vertice[4] = rot_n[1]
         vertice[5] = rot_n[2]
 
+
 def get_axis_aligned_mesh(mesh_vertices, saved_ply_filepath=None, z_rotation_res=0.1, b_vis=False):
 
     def vis_and_save_pointcloud(pcd, b_vis=True, save_path=None):
         aabb = pcd.get_axis_aligned_bounding_box()
         aabb.color = (1, 0, 0)
         rbb = pcd.get_oriented_bounding_box()
-        rbb.color = (0,1,0)
+        rbb.color = (0, 1, 0)
         if b_vis:
             o3d.visualization.draw_geometries([pcd, aabb, rbb],
-                                        zoom=0.7,
-                                        front=[0.5439, -0.2333, -0.8060],
-                                        lookat=[2.4615, 2.1331, 1.338],
-                                        up=[-0.1781, -0.9708, 0.1608])
+                                              zoom=0.7,
+                                              front=[0.5439, -0.2333, -0.8060],
+                                              lookat=[2.4615, 2.1331, 1.338],
+                                              up=[-0.1781, -0.9708, 0.1608])
         if save_path is not None:
-            o3d.io.write_point_cloud(save_path,pcd)
+            o3d.io.write_point_cloud(save_path, pcd)
 
     pcd = o3d.geometry.PointCloud()
-    origin_points = np.asarray([[vert[0], vert[1], vert[2]] for vert in mesh_vertices])
+    origin_points = np.asarray([[vert[0], vert[1], vert[2]]
+                                for vert in mesh_vertices])
     pcd.points = o3d.utility.Vector3dVector(origin_points)
     plane1 = pyrsc.Plane()
     points_floor = origin_points[np.where(origin_points[:, 2] < 0.5)]
@@ -103,7 +106,7 @@ def get_axis_aligned_mesh(mesh_vertices, saved_ply_filepath=None, z_rotation_res
 
     best_eq, best_inliers = plane1.fit(points_floor, 0.01)
     inject_normal = np.array(best_eq[:3])
-    obj_normal = np.array([0,0,-1])
+    obj_normal = np.array([0, 0, -1])
     theta = math.acos(np.dot(inject_normal, obj_normal))
     if theta > np.pi/2:
         theta = np.pi - theta
@@ -124,9 +127,9 @@ def get_axis_aligned_mesh(mesh_vertices, saved_ply_filepath=None, z_rotation_res
         c = np.cos(t)
         s = np.sin(t)
         return np.array([[c, -s, 0, 0],
-                        [s, c, 0, 0],
-                        [0, 0, 1, 0],
-                        [0, 0, 0, 1]])
+                         [s, c, 0, 0],
+                         [0, 0, 1, 0],
+                         [0, 0, 0, 1]])
 
     resolution = z_rotation_res
     steps_num = int(180/resolution)
@@ -134,15 +137,16 @@ def get_axis_aligned_mesh(mesh_vertices, saved_ply_filepath=None, z_rotation_res
         pcd_update.transform(rotz(resolution/180*np.pi))
         aabb = pcd_update.get_axis_aligned_bounding_box()
         # print('aabb: ', aabb)
-        current_sum = math.sqrt((aabb.max_bound[0]-aabb.min_bound[0])**2 + (aabb.max_bound[1]-aabb.min_bound[1])**2)
-        if(min_sum>(current_sum)):
+        current_sum = math.sqrt(
+            (aabb.max_bound[0]-aabb.min_bound[0])**2 + (aabb.max_bound[1]-aabb.min_bound[1])**2)
+        if(min_sum > (current_sum)):
             min_idx = i
             min_sum = current_sum
         # print('min_sum: ', min_sum)
-    
+
     R_right = np.eye(4)
-    R_right[:3,:3] = R_floorplane
-    
+    R_right[:3, :3] = R_floorplane
+
     phi = resolution / 180 * np.pi * min_idx
     if phi > np.pi/2:
         phi = phi - np.pi
@@ -153,6 +157,7 @@ def get_axis_aligned_mesh(mesh_vertices, saved_ply_filepath=None, z_rotation_res
 
     return final_matrix
 
+
 def save_axis_aligned_mesh_transfomation(filepath, T_axis_align):
     with open(filepath, 'w') as ofs:
         for idx in range(len(T_axis_align)):
@@ -160,6 +165,7 @@ def save_axis_aligned_mesh_transfomation(filepath, T_axis_align):
             line_str = ' '.join([str(data) for data in row_data])
             ofs.write(line_str)
             ofs.write('\n')
+
 
 def load_axis_aligned_mesh_transfomation(filepath):
     T = np.eye(4)
@@ -172,6 +178,7 @@ def load_axis_aligned_mesh_transfomation(filepath):
             T[idx, 2] = float(data[2])
             T[idx, 3] = float(data[3])
     return T
+
 
 def transform_and_save_mesh(input_filepath, save_filepath, trans_vector, rot_vec=None, b_axis_aligned_mesh=True):
     mesh = PlyData.read(input_filepath)
@@ -187,7 +194,7 @@ def transform_and_save_mesh(input_filepath, save_filepath, trans_vector, rot_vec
     if b_axis_aligned_mesh:
         # axis_aligned_mesh_filepath = osp.join(osp.dirname(input_filepath), 'axis_aligned_'+osp.basename(input_filepath))
         T = get_axis_aligned_mesh(v_vertices, saved_ply_filepath=None)
-        R_axis_align = T[:3,:3]
+        R_axis_align = T[:3, :3]
         rotate_mesh(v_vertices, R_axis_align)
 
     PlyData([v_vertices, v_faces], text=False).write(save_filepath)
@@ -279,20 +286,22 @@ def transform_and_save_cam_trajectory(cam_trajectory_filepath, saved_cam_traject
                 pos_w = rot_vec @ pos_w
 
             # camera-frame
-            #     /|\ Z
-            #      |    _ Y
-            #      |    /|
-            #      |   /
-            #      |  /
-            #      | /
-            #      |/___________\ X
-            #                   /
+            #        __  Z
+            #         /|
+            #        /
+            #       /___________\ X
+            #      |            /
+            #      |
+            #      |
+            #      |
+            #      |
+            #     \|/ Y
             # rotate to world frame
             # transform to camera frame
             pos_c = -rot_x_90n @ pos_w
             # fix pos_y == 1.6m
             if traj_file_name in large_apart_0_traj_files:
-                pos_c[1]=1.6 + 2.75
+                pos_c[1] = 1.6 + 2.75
             else:
                 pos_c[1] = 1.6
             v_cam_position.append([pos_c[0], pos_c[1], pos_c[2]])
@@ -325,7 +334,7 @@ def transform_and_save_infosemanticjson(object_semantic_filepath, saved_object_s
         # if obj_cls_name in ReplicaXRDatasetConfig().type2class:
         obb_center = obj_bbox['oriented_bbox']['abb']['center']
         obb_R = Rotation.from_quat(obj_bbox['oriented_bbox']
-                            ['orientation']['rotation']).as_matrix()
+                                   ['orientation']['rotation']).as_matrix()
         obb_t = np.array(obj_bbox['oriented_bbox']
                          ['orientation']['translation'])
         obb_T = np.eye(4)
@@ -369,7 +378,7 @@ def transform_and_save_bbox_prior(object_semantic_filepath, saved_3dbbox_prior_f
         obb_center = obj_bbox['oriented_bbox']['abb']['center']
         obb_size = obj_bbox['oriented_bbox']['abb']['sizes']
         obb_R = Rotation.from_quat(obj_bbox['oriented_bbox']
-                            ['orientation']['rotation']).as_matrix()
+                                   ['orientation']['rotation']).as_matrix()
         obb_t = np.array(obj_bbox['oriented_bbox']
                          ['orientation']['translation'])
         obb_T = np.eye(4)
@@ -411,18 +420,65 @@ def transform_and_save_bbox_prior(object_semantic_filepath, saved_3dbbox_prior_f
         json.dump(root_node, fd)
 
 
+obj_cls_dict = {}
+
+
+def transform_and_save_new_bbox_prior(
+        raw_obj_bbox_prior_filepath, new_obj_bbox_prior_filepath, rot_vec=np.eye(3)):
+    with open(raw_obj_bbox_prior_filepath, 'r') as fd:
+        raw_obj_data = json.load(fd)
+
+    new_obj_data = raw_obj_data.copy()
+    v_obj_data = new_obj_data['objects']
+
+    for obj_data in v_obj_data:
+        cls_name = obj_data['name'][0:obj_data['name'].rfind('_')]
+        if not cls_name in obj_cls_dict:
+            obj_cls_dict[cls_name] = 1
+        else:
+            obj_cls_dict[cls_name] += 1
+
+        angle_x = float(obj_data['rotations']['x'])
+        angle_y = float(obj_data['rotations']['y'])
+        angle_z = float(obj_data['rotations']['z'])
+
+        R_obj = Rotation.from_euler(
+            'zyx', [angle_z, angle_y, angle_x], degrees=True).as_matrix()
+        R_obj_new = rot_vec @ R_obj
+        angle_z, angle_y, angle_x = Rotation.from_matrix(
+            R_obj_new).as_euler('zyx', degrees=True)
+        obj_data['rotations']['x'] = angle_x
+        obj_data['rotations']['y'] = angle_y
+        obj_data['rotations']['z'] = angle_z
+
+        center_x = float(obj_data['centroid']['x'])
+        center_y = float(obj_data['centroid']['y'])
+        center_z = float(obj_data['centroid']['z'])
+        if 'large_apartment_0.json' in raw_obj_bbox_prior_filepath:
+            center_z -= -1.07
+        new_center = rot_vec @ np.array([center_x, center_y, center_z])
+        obj_data['centroid']['x'] = float(new_center[0])
+        obj_data['centroid']['y'] = float(new_center[1])
+        obj_data['centroid']['z'] = float(new_center[2])
+
+    # print('cls_num/object_bbox_num: {}/{}'.format(len(obj_cls_dict), len(v_obj_data)))
+
+    with open(new_obj_bbox_prior_filepath, 'w') as fd:
+        json.dump(new_obj_data, fd)
+
+
 def main(dataset_path):
 
     scene_folders = [f for f in os.listdir(
         dataset_path) if osp.isdir(osp.join(dataset_path, f))]
 
-    b_skip_mesh = False
+    b_skip_mesh = True
     b_skip_semantic_mesh = True
     b_skip_info_semantic_json = True
-    b_skip_3dbbox_prior = True
-    b_skip_cam_6dof_file = False
+    b_skip_3dbbox_prior = False
+    b_skip_cam_6dof_file = True
     for folder in scene_folders:
-        if folder != 'room_2':
+        if folder == 'frl_apartment_1':
             continue
 
         print(
@@ -436,16 +492,24 @@ def main(dataset_path):
             dataset_path, folder, 'semantic.json')
         object_semantic_filepath = osp.join(
             dataset_path, folder, 'habitat/info_semantic.json')
-        saved_mesh_filepath = osp.join(dataset_path, folder, scene_name+'_aligned.ply')
+        saved_mesh_filepath = osp.join(
+            dataset_path, folder, scene_name+'_aligned.ply')
         saved_semantic_mesh_filepath = osp.join(
             dataset_path, folder, 'habitat/rotated_mesh_semantic.ply')
-        cam_position_filepath = glob.glob(osp.join(dataset_path, folder, scene_name + '_trajectory*.json'))
-        saved_cam_position_filepath = [traj_fp[:-5]+'.txt' for traj_fp in cam_position_filepath]
+        cam_position_filepath = glob.glob(
+            osp.join(dataset_path, folder, scene_name + '_trajectory*.json'))
+        saved_cam_position_filepath = [
+            traj_fp[:-5]+'.txt' for traj_fp in cam_position_filepath]
         saved_object_semantic_filepath = osp.join(
             dataset_path, folder, 'habitat/rotated_info_semantic.json')
         saved_obj_bbox_prior_filepath = osp.join(
             dataset_path, folder, scene_name+'.json')
-        saved_axis_align_mesh_T_filepath = osp.join(dataset_path, folder, 'axis_aligned_transform.txt')
+        saved_axis_align_mesh_T_filepath = osp.join(
+            dataset_path, folder, 'axis_aligned_transform.txt')
+
+        raw_obj_bbox_prior_filepath = saved_obj_bbox_prior_filepath
+        new_obj_bbox_prior_filepath = osp.join(
+            dataset_path, folder, scene_name+'_aligned.json')
 
         assert osp.exists(
             scene_mesh_filepath), f"{scene_mesh_filepath} doesnt exist..."
@@ -463,8 +527,8 @@ def main(dataset_path):
 
         if osp.exists(saved_axis_align_mesh_T_filepath):
             # T_aa = np.load(saved_axis_align_mesh_T_filepath)
-            T_aa = load_axis_aligned_mesh_transfomation(saved_axis_align_mesh_T_filepath)
-            print(T_aa)
+            T_aa = load_axis_aligned_mesh_transfomation(
+                saved_axis_align_mesh_T_filepath)
         else:
             T_aa = None
 
@@ -474,11 +538,12 @@ def main(dataset_path):
         # translate the origin of mesh
         if not b_skip_mesh:
             T_axis_align = transform_and_save_mesh(
-                    scene_mesh_filepath, saved_mesh_filepath, gravity_center, rot_vec=None)
+                scene_mesh_filepath, saved_mesh_filepath, gravity_center, rot_vec=None)
             print('T_axis_align:\n', T_axis_align)
             if T_axis_align is not None:
                 # np.save(saved_axis_align_mesh_T_filepath, T_aa)
-                save_axis_aligned_mesh_transfomation(saved_axis_align_mesh_T_filepath, T_axis_align)
+                save_axis_aligned_mesh_transfomation(
+                    saved_axis_align_mesh_T_filepath, T_axis_align)
 
         if not b_skip_semantic_mesh:
             transform_and_save_mesh(
@@ -489,9 +554,8 @@ def main(dataset_path):
             # transform_and_save_camposition(
             #     cam_position_filepath, saved_cam_position_filepath, gravity_center)
             for idx in range(len(cam_position_filepath)):
-
                 transform_and_save_cam_trajectory(
-                    cam_position_filepath[idx], saved_cam_position_filepath[idx], gravity_center, rot_vec=T_aa[:3,:3])
+                    cam_position_filepath[idx], saved_cam_position_filepath[idx], gravity_center, rot_vec=T_aa[:3, :3])
 
         # translate object
         if not b_skip_info_semantic_json:
@@ -500,8 +564,13 @@ def main(dataset_path):
 
         # parse and save objects' 3dbbox
         if not b_skip_3dbbox_prior:
-            transform_and_save_bbox_prior(
-                object_semantic_filepath, saved_obj_bbox_prior_filepath, gravity_center, scene_name)
+            # transform_and_save_bbox_prior(
+            #     object_semantic_filepath, saved_obj_bbox_prior_filepath, gravity_center, scene_name)
+            transform_and_save_new_bbox_prior(
+                raw_obj_bbox_prior_filepath, new_obj_bbox_prior_filepath, rot_vec=T_aa[:3, :3])
+
+    print('len: ', len(obj_cls_dict))
+    print(obj_cls_dict)
 
 
 if __name__ == '__main__':

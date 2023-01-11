@@ -256,6 +256,7 @@ int main(int argc, char* argv[]) {
       // if (j + 1 < numSpots) {
       //     T_cam_world = R_side * T_cam_world;
       // }
+      std::cout <<"T_c_w:\n" << T_cam_world << "\n";
       s_cam.GetModelViewMatrix() = T_cam_world;
 
       // Render
