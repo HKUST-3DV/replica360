@@ -14,23 +14,9 @@ from scipy.spatial.transform import Rotation
 import glob
 import pyransac3d as pyrsc
 import math
+from data_config import ReplicaXRDatasetConfig
 
 BASE_DIR = osp.dirname(osp.abspath(__file__))
-
-
-class ReplicaXRDatasetConfig(object):
-    def __init__(self):
-        self.num_class = 9
-
-        self.type2class = {'basket': 0, 'bed': 1, 'cabinet': 2, 'chair': 3, 'sofa': 4, 'table': 5,
-                           'door': 6, 'window': 7, 'bookshelf': 8, 'picture': 9,
-                           'counter': 10, 'blinds': 11, 'desk': 12,
-                           'shelves': 13, 'curtain': 14, 'dresser': 15, 'pillow': 16, 'mirror': 17,
-                           'floor_mat': 18, 'clothes': 19, 'books': 20, 'fridge': 21, 'tv': 22,
-                           'paper': 23, 'towel': 24, 'shower_curtain': 25, 'box': 26,
-                           'whiteboard': 27, 'person': 28, 'nightstand': 29, 'toilet': 30,
-                           'sink': 31, 'lamp': 32, 'bathtub': 33, 'bag': 34, 'stool': 35, 'rug': 36, 'top_lamp': 37, 'trash_can': 38,
-                           'wall_clock': 39}
 
 
 def load_scene_gravity(scene_semantic_file):
@@ -179,7 +165,7 @@ def load_axis_aligned_mesh_transfomation(filepath):
             T[idx, 3] = float(data[3])
     return T
 
-
+# get Manhattan-aligned mesh
 def transform_and_save_mesh(input_filepath, save_filepath, trans_vector, rot_vec=None, b_axis_aligned_mesh=True):
     mesh = PlyData.read(input_filepath)
     v_vertices = mesh.elements[0]
@@ -227,7 +213,7 @@ def transform_and_save_camposition(cam_position_filepath, saved_cam_position_fil
 
     return True
 
-
+# convert camera trajectory of habitat-sim into trajectory of OpenGL
 def transform_and_save_cam_trajectory(cam_trajectory_filepath, saved_cam_trajectory_filepath, gravity_center, rot_vec=None):
     v_cam_position = []
     rot_x_90 = Rotation.from_rotvec(np.pi/2 * np.array([1, 0, 0])).as_matrix()
@@ -236,7 +222,9 @@ def transform_and_save_cam_trajectory(cam_trajectory_filepath, saved_cam_traject
     traj_file_name = osp.basename(cam_trajectory_filepath)
     large_apart_0_traj_files = ['large_apartment_0_trajectory0.json', 'large_apartment_0_trajectory1.json',
                                 'large_apartment_0_trajectory2.json',
-                                'large_apartment_0_trajectory3.json']
+                                'large_apartment_0_trajectory3.json',
+                                'large_apartment_0_trajectory0_repair.json',
+                                'large_apartment_0_trajectory7.json']
     with open(cam_trajectory_filepath, 'r') as ifs:
         full_data = json.load(ifs)
         keyframes = full_data['keyframes']
@@ -283,7 +271,7 @@ def transform_and_save_cam_trajectory(cam_trajectory_filepath, saved_cam_traject
             # rotate to world frame
             pos_w = rot_x_90n @ pos_translated
             if rot_vec is not None:
-                pos_w = rot_vec @ pos_w
+                pos_w = np.linalg.inv(rot_vec) @ pos_w
 
             # camera-frame
             #        __  Z
@@ -319,7 +307,7 @@ def transform_and_save_cam_trajectory(cam_trajectory_filepath, saved_cam_traject
 
     return True
 
-
+# convert info_semantic.json into Manhattan-aligned frame
 def transform_and_save_infosemanticjson(object_semantic_filepath, saved_object_semantic_filepath, gravity_center):
     total_sem_data = None
     v_obj_bbox = None
@@ -353,7 +341,7 @@ def transform_and_save_infosemanticjson(object_semantic_filepath, saved_object_s
 
     return True
 
-
+# convert info_semantic.json into labelCloud.json
 def transform_and_save_bbox_prior(object_semantic_filepath, saved_3dbbox_prior_filepath, gravity_center, scene_name=None):
     if scene_name is not None:
         pointcloud_filename = scene_name+'.ply'
@@ -421,8 +409,7 @@ def transform_and_save_bbox_prior(object_semantic_filepath, saved_3dbbox_prior_f
 
 
 obj_cls_dict = {}
-
-
+# convert labelCloud.json into Manhattan-aligned frame
 def transform_and_save_new_bbox_prior(
         raw_obj_bbox_prior_filepath, new_obj_bbox_prior_filepath, rot_vec=np.eye(3)):
     with open(raw_obj_bbox_prior_filepath, 'r') as fd:
@@ -475,21 +462,25 @@ def main(dataset_path):
     b_skip_mesh = True
     b_skip_semantic_mesh = True
     b_skip_info_semantic_json = True
-    b_skip_3dbbox_prior = False
-    b_skip_cam_6dof_file = True
+    b_skip_3dbbox_prior = True
+    b_skip_cam_6dof_file = False
     for folder in scene_folders:
-        if folder == 'frl_apartment_1':
+        if folder != 'large_apartment_0':
             continue
 
         print(
             f' ------------------------ preprocessing scene {folder} ------------------------ ')
 
         scene_name = folder
+        # raw mesh provided by replica dataset
         scene_mesh_filepath = osp.join(dataset_path, folder, 'mesh.ply')
+        # rawsemantic mesh provided by replica dataset
         semantic_mesh_filepath = osp.join(
             dataset_path, folder, 'habitat/mesh_semantic.ply')
+        # gravity info
         scene_semantic_filepath = osp.join(
             dataset_path, folder, 'semantic.json')
+        # semantic info
         object_semantic_filepath = osp.join(
             dataset_path, folder, 'habitat/info_semantic.json')
         saved_mesh_filepath = osp.join(
@@ -497,7 +488,7 @@ def main(dataset_path):
         saved_semantic_mesh_filepath = osp.join(
             dataset_path, folder, 'habitat/rotated_mesh_semantic.ply')
         cam_position_filepath = glob.glob(
-            osp.join(dataset_path, folder, scene_name + '_trajectory*.json'))
+            osp.join(dataset_path, folder, scene_name + '_trajectory4.json'))
         saved_cam_position_filepath = [
             traj_fp[:-5]+'.txt' for traj_fp in cam_position_filepath]
         saved_object_semantic_filepath = osp.join(
@@ -535,7 +526,7 @@ def main(dataset_path):
         if scene_name == 'large_apartment_0':
             gravity_center += np.array([0, 0, -1.07])
 
-        # translate the origin of mesh
+        # get Manhattan-aligned mesh
         if not b_skip_mesh:
             T_axis_align = transform_and_save_mesh(
                 scene_mesh_filepath, saved_mesh_filepath, gravity_center, rot_vec=None)
@@ -544,12 +535,13 @@ def main(dataset_path):
                 # np.save(saved_axis_align_mesh_T_filepath, T_aa)
                 save_axis_aligned_mesh_transfomation(
                     saved_axis_align_mesh_T_filepath, T_axis_align)
-
+        
+        # get Manhattan-aligned semantic mesh
         if not b_skip_semantic_mesh:
             transform_and_save_mesh(
                 semantic_mesh_filepath, saved_semantic_mesh_filepath, gravity_center)
 
-        # translate the camera trajectory
+        # get camera trajectory to be used in OpenGL
         if not b_skip_cam_6dof_file:
             # transform_and_save_camposition(
             #     cam_position_filepath, saved_cam_position_filepath, gravity_center)
@@ -557,12 +549,12 @@ def main(dataset_path):
                 transform_and_save_cam_trajectory(
                     cam_position_filepath[idx], saved_cam_position_filepath[idx], gravity_center, rot_vec=T_aa[:3, :3])
 
-        # translate object
+        # get info_semantic.json in Manhattan-aligned frame
         if not b_skip_info_semantic_json:
             transform_and_save_infosemanticjson(
                 object_semantic_filepath, saved_object_semantic_filepath, gravity_center)
 
-        # parse and save objects' 3dbbox
+        # get 3dbbox info in Manhattan-aligned frame
         if not b_skip_3dbbox_prior:
             # transform_and_save_bbox_prior(
             #     object_semantic_filepath, saved_obj_bbox_prior_filepath, gravity_center, scene_name)

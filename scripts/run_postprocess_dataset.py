@@ -44,6 +44,15 @@ def vis_color_pointcloud(rgb_img_filepath, depth_img_filepath, saved_color_pcl_f
 
         return unit_map
 
+    def display_inlier_outlier(cloud, ind):
+        inlier_cloud = cloud.select_by_index(ind)
+        outlier_cloud = cloud.select_by_index(ind, invert=True)
+
+        print("Showing outliers (red) and inliers (gray): ")
+        outlier_cloud.paint_uniform_color([1, 0, 0])
+        inlier_cloud.paint_uniform_color([0.8, 0.8, 0.8])
+        o3d.visualization.draw([inlier_cloud, outlier_cloud])
+
     assert osp.exists(rgb_img_filepath), 'rgb panorama doesnt exist!!!'
     assert osp.exists(depth_img_filepath), 'depth panorama doesnt exist!!!'
 
@@ -69,6 +78,9 @@ def vis_color_pointcloud(rgb_img_filepath, depth_img_filepath, saved_color_pcl_f
     o3d_pointcloud.points = o3d.utility.Vector3dVector(
         pointcloud.reshape(-1, 3))
     o3d_pointcloud.colors = o3d.utility.Vector3dVector(color.reshape(-1, 3))
+    # remove outliers
+    # cl, ind = o3d_pointcloud.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+    # display_inlier_outlier(o3d_pointcloud, ind)
     o3d.io.write_point_cloud(saved_color_pcl_filepath, o3d_pointcloud)
     return o3d_pointcloud
 
@@ -150,9 +162,11 @@ def transform_and_save_bbox_info(
             crop_bbox = crop_pcl.get_axis_aligned_bounding_box()
             crop_bbox.color = (0, 1, 0)
             crop_pcl_sizes = (crop_bbox.max_bound - crop_bbox.min_bound)
-            # print('bbox sizes: {}, crop_bbox_size: {}'.format(sizes, crop_pcl_sizes))
-            # if len(crop_pcl.points) > 50 and np.all(crop_pcl_sizes/sizes >= 0.5):
-            if len(crop_pcl.points) > 100:
+            crop_pcl_t_sizes = np.array([crop_pcl_sizes[1], crop_pcl_sizes[0], crop_pcl_sizes[2]])
+            if len(crop_pcl.points) > 100 and (np.all(crop_pcl_sizes/sizes >= 0.25) or np.all(crop_pcl_t_sizes/sizes >= 0.25) or cls_name in ['mirror', 'picture', 'tv', 'window']):
+            # if len(crop_pcl.points) > 100:
+                # print('bbox sizes: {}, crop_bbox_size: {}'.format(sizes, crop_pcl_sizes))
+                # print('add {}'.format(obj_data['name']))
                 # o3d.visualization.draw_geometries([pointcloud_in_c, bbox, crop_bbox])
                 obj_data_in_c['objects'].append(obj_data)
             else:
@@ -431,15 +445,53 @@ def vis_objs3d(image, v_bbox3d, b_show_axes=False, b_show_centroid=False, b_show
             draw_objinfo(image, centroid, obj_label, color)
     return image
 
+def read_spots_need_repaired(spot_need_repair_filepath):
+    v_spots = []
+    with open(spot_need_repair_filepath) as ifs:
+        lines = ifs.readlines()
+        # print(lines)
+        for line in lines:
+            line = line.rstrip('\n')
+            if len(line) == 0:
+                continue
+            v_spots.append(line.split()[-1])
+    return v_spots
+
+def oss_upload(ossutil_exe, target_url_path, local_data_folder):
+    # for src_folder in local_data_folders:
+        # file_fields = [field for field in src_file.split("/") if len(field) > 0]
+        # if os.path.isdir(src_file):
+        #     src_folder_name = file_fields[-1]
+        #     zip_src_file_name = src_folder_name + ".zip"
+        #     zip_src_file_path = src_file + ".zip"
+        #     if not os.path.exists(zip_src_file_path):
+        #         mv3dhelper.compress_file(zip_src_file_path, src_file)
+            
+        #     target_url_path = os.path.join(oss_url, zip_src_file_name)
+        #     cmd = ossutil_exe + " cp -f " + zip_src_file_path + " " + target_url_path
+        #     os.system(cmd)
+        # if os.path.isfile(src_file):
+        #     src_file_name = file_fields[-1]
+        #     target_url_path = os.path.join(oss_url, src_file_name)
+        #     cmd = ossutil_exe + " cp -f " + src_file + " " + target_url_path
+        #     os.system(cmd)
+    cmd = ossutil_exe + " cp -rf " + local_data_folder + " " + target_url_path
+    os.system(cmd)
 
 def main(raw_dataset_path, render_dataset_path):
 
     house_folders = [f for f in os.listdir(
         render_dataset_path) if osp.isdir(osp.join(render_dataset_path, f))]
 
+    ossutil_exe_path = '/home/ziqianbai/Projects/vlab/odometry_evaluation/config/ossutil64'
+
+    update_house_folders = ['frl_apartment_2_000', 'frl_apartment_3_000', 'frl_apartment_4_000', 'frl_apartment_5_000', 'large_apartment_0_000', 'large_apartment_0_001', 'large_apartment_0_002', 'large_apartment_0_003', 'large_apartment_0_004',
+                         'large_apartment_0_005', 'large_apartment_0_006', 'large_apartment_0_007', 'large_apartment_2_000', 'large_apartment_2_001', 
+                         'large_apartment_2_003']
+                        #  'large_apartment_2_003', 'office_2_000', 'office_3_000', 'room_1_000', 'room_2_000']
     for folder in house_folders:
-        # if 'frl_apartment_0_000' != folder:
-        #     continue
+        if folder != "frl_apartment_3_000":
+            continue
 
         print(
             f' ------------------------ preprocessing house {folder} ------------------------ ')
@@ -451,12 +503,21 @@ def main(raw_dataset_path, render_dataset_path):
             raw_dataset_path, scene_name, scene_name+'_aligned.json')
         print('raw_3dbbox_file: ', obj_bbox_filepath)
 
+        spot_need_repair_filepath = osp.join(render_dataset_path, folder, 'unused_scans.txt')
         v_spot_folders = [spot for spot in os.listdir(osp.join(
             render_dataset_path, house_name)) if osp.isdir(osp.join(render_dataset_path, house_name, spot))]
+        
+        if osp.exists(spot_need_repair_filepath):
+            v_update_spots = read_spots_need_repaired(spot_need_repair_filepath)
+        else:
+            v_update_spots = None
 
         assert len(v_spot_folders), 'Empty house folder: {}'.format(house_name)
+        v_spot_folders.sort()
 
         for spot_name in v_spot_folders:
+            if (v_update_spots is not None) and (spot_name not in v_update_spots):
+                continue
             print(f' ------ preprocessing spot {spot_name} ------ ')
 
             spot_rgb_img_filepath = osp.join(
@@ -472,6 +533,7 @@ def main(raw_dataset_path, render_dataset_path):
             saved_bbox_vis_img_filepath = osp.join(
                 render_dataset_path, house_name, spot_name, 'bbox_vis.png')
 
+            # if False:
             T_w_c = load_panorama_cam_pose(spot_pose_filepath)
 
             # save color pointcloud in camera frame
@@ -484,8 +546,12 @@ def main(raw_dataset_path, render_dataset_path):
             # visualize bbox on panorama
             rgb_img = cv2.imread(spot_rgb_img_filepath, -1)
             vis_img = vis_objs3d(rgb_img, bbox_in_c,
-                                 b_show_axes=False, b_show_centroid=True, b_show_bbox3d=True, b_show_info=True)
+                                b_show_axes=False, b_show_centroid=True, b_show_bbox3d=True, b_show_info=True)
             cv2.imwrite(saved_bbox_vis_img_filepath, vis_img)
+
+            cloud_data_url = "oss://3dvision/holistic-scene-understanding/ReplicaXR-Processed/"+house_name+"/"+spot_name
+            src_data_folderpath = osp.join(render_dataset_path, house_name, spot_name)
+            oss_upload(ossutil_exe_path, cloud_data_url, src_data_folderpath)
 
 
 if __name__ == '__main__':
