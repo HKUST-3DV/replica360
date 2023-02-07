@@ -9,3 +9,6 @@ test-glob/*.txt
 *.jpeg
 tmp/
 test*.sh
+ossutil_output/
+scripts/__pycache__/
+.vscode/
