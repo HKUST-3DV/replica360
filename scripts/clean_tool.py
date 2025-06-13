@@ -22,7 +22,9 @@ import open3d as o3d
 #         if osp.exists(tmp_json_filepath):
 #             os.remove(tmp_json_filepath)
 
-mesh_filepath = '/media/ziqianbai/BACKPACK_DATA1/Replica_all/replica_v1/large_apartment_0/large_apartment_0_aligned.ply'
+# mesh_filepath = '/media/hkust/PRODATA1/replica_v1/large_apartment_1/large_apartment_1.ply'
+mesh_filepath = '/home/hkust/Desktop/Mesh.ply'
 pcl = o3d.io.read_point_cloud(mesh_filepath)
+mesh = o3d.geometry.TetraMesh.create_from_point_cloud(pcl)
 
 o3d.visualization.draw_geometries([pcl])

@@ -1,4 +1,3 @@
-# from apriltags_eth import make_default_detector
 import os
 import os.path as osp
 import json
@@ -29,15 +28,16 @@ def load_scene_semantic_info(semantic_info_filepath:str = None):
         print(f'instance object mesh num: {len(objects_data)}')
     return objects_data
 
-def save_as_trimesh(v_vertices, v_vertice_normals, v_vertice_colors, v_faces, output_filepath):
+def save_as_trimesh(v_vertices, v_vertice_normals, v_vertice_colors, v_faces, output_filepath, normalized=False):
     origin_mesh = trimesh.Trimesh(vertices=v_vertices, faces=v_faces, vertex_normals=v_vertice_normals, vertex_colors=v_vertice_colors, process=False)
     bbox = origin_mesh.bounding_box.bounds
     # Compute location and scale
     loc = (bbox[0] + bbox[1]) / 2
     scale = (bbox[1] - bbox[0])
     # normalized mesh
-    origin_mesh.apply_translation(-loc)
-    origin_mesh.apply_scale(1.0/scale)
+    if normalized:
+        origin_mesh.apply_translation(-loc)
+        origin_mesh.apply_scale(1.0/scale)
     origin_mesh.export(output_filepath)
 
 
@@ -54,15 +54,51 @@ def save_as_pointcloud(v_vertices, v_vertice_normals, v_vertice_colors, output_f
     o3d_pcl.colors = o3d.utility.Vector3dVector(v_vertice_colors)
 
     o3d.io.write_point_cloud(output_filepath, o3d_pcl)
+    # o3d.visualization.draw_geometries([o3d_pcl])
+
+def translate_mesh(vertices, trans):
+    for vertice in vertices:
+        vertice[0] += -trans[0]
+        vertice[1] += -trans[1]
+        vertice[2] += -trans[2]
 
 
-def gen_object_mesh_per_scene(mesh_filepath, scene_semantic_json_data, output_objects_folderpath):
+def rotate_mesh(vertices, rot_matrix):
+    for vertice in vertices:
+        v = np.array([vertice[0], vertice[1], vertice[2]])
+        n = np.array([vertice[3], vertice[4], vertice[5]])
+        rot_v = rot_matrix @ v
+        rot_n = rot_matrix @ n
+        vertice[0] = rot_v[0]
+        vertice[1] = rot_v[1]
+        vertice[2] = rot_v[2]
+        vertice[3] = rot_n[0]
+        vertice[4] = rot_n[1]
+        vertice[5] = rot_n[2]
+
+def load_axis_aligned_mesh_transfomation(filepath):
+    T = np.eye(4)
+    with open(filepath, 'r') as ifs:
+        lines_data = ifs.readlines()
+        for idx in range(len(lines_data)):
+            data = lines_data[idx].strip().split()
+            T[idx, 0] = float(data[0])
+            T[idx, 1] = float(data[1])
+            T[idx, 2] = float(data[2])
+            T[idx, 3] = float(data[3])
+    return T
+
+def gen_object_mesh_per_scene(mesh_filepath, scene_semantic_json_data, output_objects_folderpath, T_axis_align=None):
     mesh = PlyData.read(mesh_filepath)
     v_vertices = mesh.elements[0]
     # print(f'vertices: {v_vertices}')
     v_faces = mesh.elements[1]
     # print(f'faces: {v_faces}')
 
+    if T_axis_align is not None:
+        translate_mesh(v_vertices, T_axis_align[0:3, 3])
+        rotate_mesh(v_vertices, T_axis_align[0:3, 0:3])
+        
     v_object_ids = {}
     for data in v_faces:
         face = data[0]
@@ -77,14 +113,17 @@ def gen_object_mesh_per_scene(mesh_filepath, scene_semantic_json_data, output_ob
         object_name = object_sem_data['class_name']
         object_id = object_sem_data['id']
 
-        if not (object_name in ReplicaXRDatasetConfig().type2class):
+        # if not (object_name in ReplicaXRDatasetConfig().type2class):
+        #     continue
+        object_name_filter = '(wall|floor|ceiling|Unknown|kitchen|stair|handrail|rack|undefined)'
+        if re.search(object_name_filter, object_name):
             continue
 
         print(f"Saving object mesh for {object_name} ")
         out_folder = osp.join(output_objects_folderpath, object_name)
         if not osp.exists(out_folder):
             os.makedirs(out_folder)
-        out_path = osp.join(out_folder, str(object_id)+'.ply')
+        out_path = osp.join(out_folder, str(object_id)+'.obj')
 
         v_vertex_ids = []
         v_obj_vertices = []
@@ -129,8 +168,8 @@ def gen_object_mesh_per_scene(mesh_filepath, scene_semantic_json_data, output_ob
         vertex_colors = np.asarray(vertex_colors)
         faces = np.asarray(faces)
         
-        # save_as_trimesh(vertices, vertex_normals, vertex_colors, faces, out_path)
-        save_as_pointcloud(vertices, vertex_normals, vertex_colors/255.0, out_path)
+        save_as_trimesh(vertices, vertex_normals, vertex_colors, faces, out_path)
+        # save_as_pointcloud(vertices, vertex_normals, vertex_colors/255.0, out_path)
 
 def gen_colored_semantic_mesh(mesh_filepath, scene_semantic_json_data, output_scene_mesh_filepath):
     mesh = PlyData.read(mesh_filepath)
@@ -212,17 +251,22 @@ def gen_colored_semantic_mesh(mesh_filepath, scene_semantic_json_data, output_sc
     origin_mesh.export(output_scene_mesh_filepath)
 
 def main(input_folder, output_folder):
+    SELECTED_SCENE_LST = [
+                        'frl_apartment_0', 'frl_apartment_2', 'frl_apartment_3', 'frl_apartment_4', 'frl_apartment_5', 'hotel_0', 'office_0',
+                          'office_1', 'office_2', 'office_3', 'office_4', 'room_0', 'room_1', 'room_2',
+                          'large_apartment_0', 'large_apartment_1', 'large_apartment_2',]
 
-    scene_folders = [f for f in os.listdir(input_folder) if osp.isdir(osp.join(input_folder, f))]
+    scene_folders = [f for f in os.listdir(input_folder) if osp.isdir(osp.join(input_folder, f)) if f in SELECTED_SCENE_LST]
     for scene_name in scene_folders:
-        if 'frl_apartment_0' != scene_name:
+        if 'large_apartment_0' != scene_name:
             continue
 
         print(f'Processing scene_name ----------------------- {scene_name} ------------------------')
 
         scene_path = osp.join(input_folder, scene_name)
-        mesh_filepath = osp.join(scene_path,'habitat/mesh_semantic.ply')
-        semantic_info_filepath = osp.join(scene_path, 'habitat/info_semantic.json')
+        mesh_filepath = osp.join(scene_path,'habitat/rotated_mesh_semantic.ply')
+        semantic_info_filepath = osp.join(scene_path, 'habitat/rotated_info_semantic.json')
+        saved_axis_align_mesh_T_filepath = osp.join(scene_path, 'axis_aligned_transform.txt')
         output_folderpath = osp.join(output_folder, scene_name)
         if not osp.exists(output_folderpath):
             os.makedirs(output_folderpath)
@@ -230,15 +274,20 @@ def main(input_folder, output_folder):
 
         instance_semantic_data = load_scene_semantic_info(semantic_info_filepath)
 
-        gen_object_mesh_per_scene(mesh_filepath, instance_semantic_data, output_folderpath)
+        # load scene transformation
+        T_axis_align = np.loadtxt(saved_axis_align_mesh_T_filepath)
+        if 'large_apartment_0' == scene_name:
+            T_axis_align[:3, 3] += np.array([0, 0, -1.07])
+            
+        gen_object_mesh_per_scene(mesh_filepath, instance_semantic_data, output_folderpath, T_axis_align=T_axis_align)
         # gen_colored_semantic_mesh(mesh_filepath, instance_semantic_data, saved_color_sem_mesh_filepath)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--dataset_folder", type=str, default="/media/ziqianbai/BACKPACK_DATA1/Replica_all/replica_v1")
-    parser.add_argument("--output_folder", type=str, default="/media/ziqianbai/BACKPACK_DATA1/Replica_all/replica_for_panocontext/replica_obj")
+    parser.add_argument("--dataset_folder", type=str, default="/media/hkust/PRODATA1/replica_v1/")
+    parser.add_argument("--output_folder", type=str, default="/media/hkust/PRODATA1/replica_v1/replica_obj_20240318_unnormalized/")
 
     args = parser.parse_args()
     dataset_folderpath = args.dataset_folder

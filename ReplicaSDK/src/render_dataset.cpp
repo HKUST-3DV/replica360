@@ -18,7 +18,7 @@
 #include "file_system_tools.h"
 
 const bool b_render_depth = true;
-const bool b_render_equirect = true;
+const bool b_render_equirect = false;
 const float k_depth_scale = 4000.f;
 
 // load camera trajectory file
@@ -50,9 +50,9 @@ std::vector<std::vector<float>> readCameraTrajectory(
 }
 
 // save camera pose to file
-bool saveCameraPose(const std::string &filepath, const Eigen::Matrix4d &T_w_c) {
+bool saveCameraPose(const std::string& filepath, const Eigen::Matrix4d& T_w_c) {
   std::ofstream ofs(filepath);
-  if (!ofs.is_open()){
+  if (!ofs.is_open()) {
     LOG(FATAL) << "Fail to open file : " << filepath;
     return false;
   }
@@ -60,15 +60,17 @@ bool saveCameraPose(const std::string &filepath, const Eigen::Matrix4d &T_w_c) {
   Eigen::Quaterniond q_w_c(T_w_c.block<3, 3>(0, 0));
   Eigen::Vector3d t_w_c = T_w_c.block<3, 1>(0, 3);
   // tx ty tz qx qy qz qw
-  ofs << t_w_c[0] << " " << t_w_c[1] << " " << t_w_c[2] << " " << q_w_c.x() << " " << q_w_c.y() << " " << q_w_c.z() << " " << q_w_c.w() << "\n";
+  ofs << t_w_c[0] << " " << t_w_c[1] << " " << t_w_c[2] << " " << q_w_c.x()
+      << " " << q_w_c.y() << " " << q_w_c.z() << " " << q_w_c.w() << "\n";
   ofs.close();
 
   return true;
 }
 
-bool loadMeshTransformationMatrix(const std::string &filepath, Eigen::Matrix4d &T_axis_align) {
+bool loadMeshTransformationMatrix(const std::string& filepath,
+                                  Eigen::Matrix4d& T_axis_align) {
   std::ifstream ifs(filepath);
-  if (!ifs.is_open()){
+  if (!ifs.is_open()) {
     LOG(FATAL) << "Fail to open " << filepath;
     return false;
   }
@@ -79,14 +81,15 @@ bool loadMeshTransformationMatrix(const std::string &filepath, Eigen::Matrix4d &
   std::string line_str;
   std::stringstream ss;
 
-  while(!ifs.eof()) {
+  while (!ifs.eof()) {
     ss.clear();
     std::getline(ifs, line_str);
     if (line_str.empty()) continue;
 
     ss.str(line_str);
-    ss >> T_axis_align(idx, 0) >> T_axis_align(idx, 1) >> T_axis_align(idx, 2) >> T_axis_align(idx, 3);
-    idx ++;
+    ss >> T_axis_align(idx, 0) >> T_axis_align(idx, 1) >>
+        T_axis_align(idx, 2) >> T_axis_align(idx, 3);
+    idx++;
   }
 
   ifs.close();
@@ -101,7 +104,8 @@ int main(int argc, char* argv[]) {
   ASSERT(
       argc == 8,
       "Usage: ./Path/to/ReplicaRenderDataset [mesh.ply] [textures_folderpath]  "
-      "[camera_pose_filepath] [output_directory] [img_width] [img_height] [mesh_transform_filepath]");
+      "[camera_pose_filepath] [output_directory] [img_width] [img_height] "
+      "[mesh_transform_filepath]");
 
   const std::string mesh_filepath = argv[1];
   std::string texture_folderpath = argv[2];
@@ -148,14 +152,18 @@ int main(int argc, char* argv[]) {
   pangolin::GlRenderBuffer renderBuffer(img_width, img_height);
   pangolin::GlFramebuffer frameBuffer(render, renderBuffer);
   // depth texture
-  pangolin::GlTexture depthTexture(img_width, img_height, GL_R32F, false, 0, GL_RED, GL_FLOAT, 0);
+  pangolin::GlTexture depthTexture(img_width, img_height, GL_R32F, false, 0,
+                                   GL_RED, GL_FLOAT, 0);
   pangolin::GlFramebuffer depthFrameBuffer(depthTexture, renderBuffer);
 
   // For cubemap dataset: rotation matrix of 90 degree for each face of the
   // cubemap t -> t -> t -> u -> d
-  Eigen::Transform<double, 3, Eigen::Affine> t(Eigen::AngleAxis<double>(0.5 * M_PI, Eigen::Vector3d::UnitY()));
-  Eigen::Transform<double, 3, Eigen::Affine> u(Eigen::AngleAxis<double>(0.5 * M_PI, Eigen::Vector3d::UnitX()));
-  Eigen::Transform<double, 3, Eigen::Affine> d(Eigen::AngleAxis<double>(M_PI, Eigen::Vector3d::UnitX()));
+  Eigen::Transform<double, 3, Eigen::Affine> t(
+      Eigen::AngleAxis<double>(0.1 * M_PI, Eigen::Vector3d::UnitZ()));
+  Eigen::Transform<double, 3, Eigen::Affine> u(
+      Eigen::AngleAxis<double>(0.5 * M_PI, Eigen::Vector3d::UnitX()));
+  Eigen::Transform<double, 3, Eigen::Affine> d(
+      Eigen::AngleAxis<double>(M_PI, Eigen::Vector3d::UnitX()));
   Eigen::Matrix4d R_side = Eigen::Matrix4d::Identity();
   Eigen::Matrix4d R_up = Eigen::Matrix4d::Identity();
   Eigen::Matrix4d R_down = Eigen::Matrix4d::Identity();
@@ -165,7 +173,8 @@ int main(int argc, char* argv[]) {
 
   // load mesh and textures
   PTexMesh ptexMesh(mesh_filepath, texture_folderpath, b_render_equirect);
-  pangolin::ManagedImage<Eigen::Matrix<uint8_t, 3, 1>> image(img_width, img_height);
+  pangolin::ManagedImage<Eigen::Matrix<uint8_t, 3, 1>> image(img_width,
+                                                             img_height);
   pangolin::ManagedImage<float> depthImage(img_width, img_height);
   pangolin::ManagedImage<uint16_t> depthImageInt(img_width, img_height);
 
@@ -211,7 +220,7 @@ int main(int argc, char* argv[]) {
   Eigen::Matrix4d T_cam_world = s_cam.GetModelViewMatrix();
   // mesh transformation , to be used in GLSL code
   Eigen::Matrix4d T_axis_align = Eigen::Matrix4d::Identity();
-  loadMeshTransformationMatrix(mesh_transform_filepath, T_axis_align);
+  // loadMeshTransformationMatrix(mesh_transform_filepath, T_axis_align);
 
   // rendering the dataset
   for (size_t j = 0; j < numSpots; j++) {
@@ -228,9 +237,11 @@ int main(int argc, char* argv[]) {
       // set parameters
       ptexMesh.SetExposure(0.01);
       if (b_render_equirect) {
-        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2, T_axis_align);
+        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2,
+                        T_axis_align);
       } else {
-        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 0, T_axis_align);
+        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 0,
+                        T_axis_align);
       }
       glDisable(GL_CULL_FACE);
       glPopAttrib();  // GL_VIEWPORT_BIT
@@ -253,10 +264,10 @@ int main(int argc, char* argv[]) {
       Eigen::Vector3d curr_cam_pos(v_cam_position[j][0], v_cam_position[j][1],
                                    v_cam_position[j][2]);
       T_cam_world.block<3, 1>(0, 3) = curr_cam_pos;
-      // if (j + 1 < numSpots) {
-      //     T_cam_world = R_side * T_cam_world;
-      // }
-      std::cout <<"T_c_w:\n" << T_cam_world << "\n";
+      if (j + 1 < numSpots) {
+          T_cam_world = T_cam_world * R_side.inverse();
+      }
+      std::cout << "T_c_w:\n" << T_cam_world << "\n";
       s_cam.GetModelViewMatrix() = T_cam_world;
 
       // Render
@@ -271,9 +282,11 @@ int main(int argc, char* argv[]) {
       // set parameters
       ptexMesh.SetExposure(0.01);
       if (b_render_equirect) {
-        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2, T_axis_align);
+        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2,
+                        T_axis_align);
       } else {
-        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 0, T_axis_align);
+        ptexMesh.Render(s_cam, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 0,
+                        T_axis_align);
       }
 
       glDisable(GL_CULL_FACE);
@@ -283,21 +296,28 @@ int main(int argc, char* argv[]) {
       // Download and save
       render.Download(image.ptr, GL_RGB, GL_UNSIGNED_BYTE);
 
-      char img_file_folder[1000];
-      snprintf(img_file_folder, 1000, "%s/%05ld", output_folderpath.c_str(), j);
-      if (!common::pathExists(img_file_folder)) {
-        common::createPath(img_file_folder);
+      // char img_file_folder[1000];
+      // snprintf(img_file_folder, 1000, "%s/%05ld", output_folderpath.c_str(), j);
+      // if (!common::pathExists(img_file_folder)) {
+      //   common::createPath(img_file_folder);
+      // }
+      // std::string img_file_path = std::string(img_file_folder) + "/rgb.png";
+
+      std::string rgb_folder = output_folderpath + "/images";
+      if (!common::pathExists(rgb_folder)) {
+        common::createPath(rgb_folder);
       }
-      std::string img_file_path = std::string(img_file_folder) + "/rgb.png";
-      // char img_file_path[1000];
-      // snprintf(img_file_path, 1000, "%s/%s_%05ld.png",
-      //          output_folderpath.c_str(), scene_name.c_str(), j);
+      char img_file_path[1000];
+      snprintf(img_file_path, 1000, "%s/%05ld.png",
+               rgb_folder.c_str(), j);
       pangolin::SaveImage(image.UnsafeReinterpret<uint8_t>(),
                           pangolin::PixelFormatFromString("RGB24"),
                           std::string(img_file_path), 100.0);
 
-      std::string pos_filepath = std::string(img_file_folder) + "/pose.txt";
-      saveCameraPose(pos_filepath, T_cam_world.inverse());
+      // std::string pos_filepath = std::string(img_file_folder) + "/pose.txt";
+      char pos_filepath[1000];
+      snprintf(pos_filepath, 1000, "%s/%05ld.txt", output_folderpath.c_str(), j);
+      saveCameraPose(std::string(pos_filepath), T_cam_world.inverse());
 
       if (b_render_depth) {
         // render depth image for the equirect image
@@ -309,18 +329,27 @@ int main(int argc, char* argv[]) {
         glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
         glEnable(GL_CULL_FACE);
         ptexMesh.RenderDepth(s_cam, k_depth_scale,
-                             Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2, T_axis_align);
+                             Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f), 2,
+                             T_axis_align);
         glDisable(GL_CULL_FACE);
         glPopAttrib();
 
         depthFrameBuffer.Unbind();
 
-        char img_file_folder[1000];
-        snprintf(img_file_folder, 1000, "%s/%05ld", output_folderpath.c_str(), j);
-        if (!common::pathExists(img_file_folder)) {
-          common::createPath(img_file_folder);
+        // char img_file_folder[1000];
+        // snprintf(img_file_folder, 1000, "%s/%05ld", output_folderpath.c_str(),
+        //          j);
+        // if (!common::pathExists(img_file_folder)) {
+        //   common::createPath(img_file_folder);
+        // }
+        // std::string img_file_path = std::string(img_file_folder) + "/depth.png";
+
+        std::string depth_folder = output_folderpath + "/depths";
+        if (!common::pathExists(depth_folder)) {
+          common::createPath(depth_folder);
         }
-        std::string img_file_path = std::string(img_file_folder) + "/depth.png";
+        char img_file_path[1000];
+        snprintf(img_file_path, 1000, "%s/%05ld.png", depth_folder.c_str(), j);
         // std::cout << "render depth image to " << img_file_path << "\n";
         depthTexture.Download(depthImage.ptr, GL_RED, GL_FLOAT);
 
@@ -338,7 +367,8 @@ int main(int argc, char* argv[]) {
   }
 
   auto model_stop = std::chrono::high_resolution_clock::now();
-  auto model_duration = std::chrono::duration_cast<std::chrono::microseconds>(model_stop - model_start);
+  auto model_duration = std::chrono::duration_cast<std::chrono::microseconds>(
+      model_stop - model_start);
   std::cout << "Time taken rendering the scene " << scene_name << ": "
             << model_duration.count() << " microseconds" << std::endl;
 
